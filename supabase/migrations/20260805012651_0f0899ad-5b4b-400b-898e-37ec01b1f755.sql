@@ -1,0 +1,2 @@
+DROP TRIGGER IF EXISTS set_updated_at_transcript_segments ON public.transcript_segments;
+DROP TRIGGER IF EXISTS set_updated_at_food_recall_items ON public.food_recall_items;
