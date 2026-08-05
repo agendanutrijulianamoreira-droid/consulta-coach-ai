@@ -1,0 +1,295 @@
+/**
+ * Infraestrutura de acesso a dados (Lovable Cloud).
+ * Concentra todas as consultas para que os módulos de UI não conheçam o banco.
+ */
+import { supabase } from "@/integrations/supabase/client";
+import type { AnamnesisFields, Food, MealPlan, RecallItem, Recipe } from "./types";
+
+/** Payloads JSONB são tipados no domínio; o cliente gerado exige o tipo Json. */
+const json = (value: unknown) => value as never;
+
+export interface Patient {
+  id: string;
+  name: string;
+  birth_date: string | null;
+  sex: string | null;
+  phone: string | null;
+  email: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface Consultation {
+  id: string;
+  patient_id: string;
+  status: string;
+  current_step: string;
+  started_at: string | null;
+  ended_at: string | null;
+  duration_seconds: number;
+  clinical_summary: string | null;
+  created_at: string;
+}
+
+export interface TranscriptSegment {
+  id: string;
+  speaker: string;
+  content: string;
+  offset_seconds: number;
+}
+
+function unwrap<T>(result: { data: T | null; error: { message: string } | null }): T {
+  if (result.error) throw new Error(result.error.message);
+  return result.data as T;
+}
+
+export async function listPatients() {
+  return unwrap(
+    await supabase.from("patients").select("*").order("created_at", { ascending: false }),
+  ) as Patient[];
+}
+
+export async function createPatient(input: { name: string; birth_date?: string | null; sex?: string | null; phone?: string | null }) {
+  return unwrap(await supabase.from("patients").insert(input).select().single()) as Patient;
+}
+
+export async function listConsultations() {
+  return unwrap(
+    await supabase
+      .from("consultations")
+      .select("*, patients(name)")
+      .order("created_at", { ascending: false })
+      .limit(50),
+  ) as (Consultation & { patients: { name: string } | null })[];
+}
+
+export async function createConsultation(patientId: string) {
+  return unwrap(
+    await supabase.from("consultations").insert({ patient_id: patientId }).select().single(),
+  ) as Consultation;
+}
+
+export async function getConsultation(id: string) {
+  return unwrap(
+    await supabase.from("consultations").select("*, patients(*)").eq("id", id).single(),
+  ) as Consultation & { patients: Patient };
+}
+
+export async function updateConsultation(id: string, patch: Partial<Consultation>) {
+  const { error } = await supabase.from("consultations").update(patch).eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function listSegments(consultationId: string) {
+  return unwrap(
+    await supabase
+      .from("transcript_segments")
+      .select("id, speaker, content, offset_seconds")
+      .eq("consultation_id", consultationId)
+      .order("offset_seconds", { ascending: true })
+      .order("created_at", { ascending: true }),
+  ) as TranscriptSegment[];
+}
+
+export async function insertSegments(
+  consultationId: string,
+  segments: { speaker: string; content: string; offset_seconds: number; client_id: string }[],
+) {
+  const { error } = await supabase
+    .from("transcript_segments")
+    .upsert(
+      segments.map((s) => ({ ...s, consultation_id: consultationId })),
+      { onConflict: "consultation_id,client_id", ignoreDuplicates: true },
+    );
+  if (error) throw new Error(error.message);
+}
+
+export async function getAnamnesis(consultationId: string) {
+  const { data, error } = await supabase
+    .from("anamnesis")
+    .select("fields")
+    .eq("consultation_id", consultationId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data?.fields ?? {}) as AnamnesisFields;
+}
+
+export async function saveAnamnesis(consultationId: string, fields: AnamnesisFields) {
+  const { error } = await supabase
+    .from("anamnesis")
+    .upsert({ consultation_id: consultationId, fields: json(fields) }, { onConflict: "consultation_id" });
+  if (error) throw new Error(error.message);
+}
+
+export interface AnthropometryData {
+  peso?: string;
+  altura?: string;
+  cintura?: string;
+  quadril?: string;
+  braco?: string;
+  dobras?: string;
+  bioimpedancia?: string;
+  gordura?: string;
+  massa_muscular?: string;
+  agua_corporal?: string;
+}
+
+export async function getAnthropometry(consultationId: string) {
+  const { data, error } = await supabase
+    .from("anthropometry")
+    .select("data, interpretation")
+    .eq("consultation_id", consultationId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return {
+    data: (data?.data ?? {}) as AnthropometryData,
+    interpretation: (data?.interpretation ?? "") as string,
+  };
+}
+
+export async function saveAnthropometry(
+  consultationId: string,
+  data: AnthropometryData,
+  interpretation: string,
+) {
+  const { error } = await supabase
+    .from("anthropometry")
+    .upsert({ consultation_id: consultationId, data: json(data), interpretation }, { onConflict: "consultation_id" });
+  if (error) throw new Error(error.message);
+}
+
+export async function listRecall(consultationId: string) {
+  return unwrap(
+    await supabase
+      .from("food_recall_items")
+      .select("*")
+      .eq("consultation_id", consultationId)
+      .order("position", { ascending: true }),
+  ) as RecallItem[];
+}
+
+export async function upsertRecallItem(consultationId: string, item: Partial<RecallItem> & { id?: string }) {
+  const payload = { ...item, consultation_id: consultationId };
+  const { error } = await supabase.from("food_recall_items").upsert(json(payload));
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteRecallItem(id: string) {
+  const { error } = await supabase.from("food_recall_items").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function getDiagnoses(consultationId: string) {
+  const { data, error } = await supabase
+    .from("diagnoses")
+    .select("hypotheses, recall_flags")
+    .eq("consultation_id", consultationId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return {
+    hypotheses: (data?.hypotheses ?? []) as string[],
+    recall_flags: (data?.recall_flags ?? []) as string[],
+  };
+}
+
+export async function saveDiagnoses(consultationId: string, hypotheses: string[], recall_flags: string[]) {
+  const { error } = await supabase
+    .from("diagnoses")
+    .upsert({ consultation_id: consultationId, hypotheses: json(hypotheses), recall_flags: json(recall_flags) }, { onConflict: "consultation_id" });
+  if (error) throw new Error(error.message);
+}
+
+export interface ConductRow {
+  phase: string | null;
+  kcal: number | null;
+  protein_g: number | null;
+  carb_g: number | null;
+  fat_g: number | null;
+  meals_count: number;
+  goal: string | null;
+  preferences: string[];
+  restrictions: string[];
+  notes: string | null;
+}
+
+export async function getConduct(consultationId: string) {
+  const { data, error } = await supabase
+    .from("conducts")
+    .select("phase, kcal, protein_g, carb_g, fat_g, meals_count, goal, preferences, restrictions, notes")
+    .eq("consultation_id", consultationId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return data as ConductRow | null;
+}
+
+export async function saveConduct(consultationId: string, conduct: ConductRow) {
+  const { error } = await supabase
+    .from("conducts")
+    .upsert({ consultation_id: consultationId, ...conduct }, { onConflict: "consultation_id" });
+  if (error) throw new Error(error.message);
+}
+
+export async function listFoods() {
+  return unwrap(await supabase.from("foods").select("*").order("name")) as Food[];
+}
+
+export async function createFood(food: Partial<Food>) {
+  const { error } = await supabase.from("foods").insert(json(food));
+  if (error) throw new Error(error.message);
+}
+
+export async function listRecipes() {
+  return unwrap(await supabase.from("recipes").select("*").order("name")) as unknown as Recipe[];
+}
+
+export async function getMealPlan(consultationId: string) {
+  const { data, error } = await supabase
+    .from("meal_plans")
+    .select("id, meals, totals, shopping_list, recipes, rationale")
+    .eq("consultation_id", consultationId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) return null;
+  return {
+    id: data.id as string,
+    plan: {
+      meals: data.meals,
+      totals: data.totals,
+      shopping_list: data.shopping_list,
+      recipes: data.recipes,
+    } as unknown as MealPlan,
+    rationale: (data.rationale ?? "") as string,
+  };
+}
+
+export async function saveMealPlan(consultationId: string, plan: MealPlan, rationale: string) {
+  await supabase.from("meal_plans").delete().eq("consultation_id", consultationId);
+  const { error } = await supabase.from("meal_plans").insert({
+    consultation_id: consultationId,
+    meals: json(plan.meals),
+    totals: json(plan.totals),
+    shopping_list: json(plan.shopping_list),
+    recipes: json(plan.recipes),
+    rationale,
+  });
+  if (error) throw new Error(error.message);
+}
+
+export async function getRecord(consultationId: string) {
+  const { data, error } = await supabase
+    .from("records")
+    .select("sections")
+    .eq("consultation_id", consultationId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data?.sections ?? null) as Record<string, string> | null;
+}
+
+export async function saveRecord(consultationId: string, sections: Record<string, string>) {
+  const { error } = await supabase
+    .from("records")
+    .upsert({ consultation_id: consultationId, sections: json(sections) }, { onConflict: "consultation_id" });
+  if (error) throw new Error(error.message);
+}
