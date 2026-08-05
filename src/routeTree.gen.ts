@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ConsultaIdRouteImport } from './routes/consulta.$id'
+import { Route as ProntuarioIdRouteImport } from './routes/prontuario.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -22,31 +23,40 @@ const ConsultaIdRoute = ConsultaIdRouteImport.update({
   path: '/consulta/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProntuarioIdRoute = ProntuarioIdRouteImport.update({
+  id: '/prontuario/$id',
+  path: '/prontuario/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/consulta/$id': typeof ConsultaIdRoute
+  '/prontuario/$id': typeof ProntuarioIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/consulta/$id': typeof ConsultaIdRoute
+  '/prontuario/$id': typeof ProntuarioIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/consulta/$id': typeof ConsultaIdRoute
+  '/prontuario/$id': typeof ProntuarioIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/consulta/$id'
+  fullPaths: '/' | '/consulta/$id' | '/prontuario/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/consulta/$id'
-  id: '__root__' | '/' | '/consulta/$id'
+  to: '/' | '/consulta/$id' | '/prontuario/$id'
+  id: '__root__' | '/' | '/consulta/$id' | '/prontuario/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ConsultaIdRoute: typeof ConsultaIdRoute
+  ProntuarioIdRoute: typeof ProntuarioIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -65,12 +75,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConsultaIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/prontuario/$id': {
+      id: '/prontuario/$id'
+      path: '/prontuario/$id'
+      fullPath: '/prontuario/$id'
+      preLoaderRoute: typeof ProntuarioIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ConsultaIdRoute: ConsultaIdRoute,
+  ProntuarioIdRoute: ProntuarioIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
