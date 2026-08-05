@@ -20,7 +20,7 @@ import {
   interpretAnthropometry,
   transcribeChunk,
 } from "@/lib/nutrios/ai.functions";
-import { MEAL_SLOT_LABELS, RESTRICTION_OPTIONS, type AnamnesisFields, type MealPlan } from "@/lib/nutrios/types";
+import { MEAL_SLOT_LABELS, RESTRICTION_OPTIONS, type AnamnesisFields, type MealPlan, type RecallItem } from "@/lib/nutrios/types";
 
 export const Route = createFileRoute("/consulta/$id")({
   head: () => ({
@@ -56,7 +56,7 @@ function ConsultationPage() {
   const [anamnesis, setAnamnesis] = useState<AnamnesisFields>({});
   const [anthro, setAnthro] = useState<db.AnthropometryData>({});
   const [interpretation, setInterpretation] = useState("");
-  const [recall, setRecall] = useState<db.RecallItemRow[]>([]);
+  const [recall, setRecall] = useState<RecallItem[]>([]);
   const [hypotheses, setHypotheses] = useState<string[]>([]);
   const [flags, setFlags] = useState<string[]>([]);
   const [conduct, setConduct] = useState<db.ConductRow>({
@@ -81,7 +81,7 @@ function ConsultationPage() {
       const anthropometry = await db.getAnthropometry(id);
       setAnthro(anthropometry.data);
       setInterpretation(anthropometry.interpretation);
-      setRecall((await db.listRecall(id)) as db.RecallItemRow[]);
+      setRecall((await db.listRecall(id)) as RecallItem[]);
       const diagnoses = await db.getDiagnoses(id);
       setHypotheses(diagnoses.hypotheses);
       setFlags(diagnoses.recall_flags);
@@ -278,7 +278,7 @@ function ConsultationPage() {
               void db.deleteRecallItem(itemId);
             }}
             onAdd={() => {
-              const item: db.RecallItemRow = {
+              const item: RecallItem = {
                 id: crypto.randomUUID(),
                 time_label: "",
                 foods: "",
