@@ -494,7 +494,7 @@ export type Database = {
       }
       transcript_segments: {
         Row: {
-          client_id: string | null
+          client_id: string
           consultation_id: string
           content: string
           created_at: string
@@ -503,7 +503,7 @@ export type Database = {
           speaker: string
         }
         Insert: {
-          client_id?: string | null
+          client_id?: string
           consultation_id: string
           content: string
           created_at?: string
@@ -512,7 +512,7 @@ export type Database = {
           speaker?: string
         }
         Update: {
-          client_id?: string | null
+          client_id?: string
           consultation_id?: string
           content?: string
           created_at?: string
