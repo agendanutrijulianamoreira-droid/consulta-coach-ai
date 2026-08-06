@@ -10,10 +10,6 @@ function format(seconds: number) {
   return `${seconds < 0 ? "-" : ""}${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-/**
- * Cronômetro da consulta: 15 minutos de referência, avisos aos 10 e 5 minutos
- * restantes e alerta sonoro/tátil ao atingir o alvo. A gravação nunca para.
- */
 export function ConsultationTimer({ seconds, running }: { seconds: number; running: boolean }) {
   const [alerted, setAlerted] = useState(false);
   const warned = useRef({ ten: false, five: false });
@@ -37,19 +33,11 @@ export function ConsultationTimer({ seconds, running }: { seconds: number; runni
     }
   }, [remaining, running, alerted]);
 
-  const tone =
-    remaining <= 300 ? "text-destructive" : remaining <= 600 ? "text-[oklch(0.68_0.16_75)]" : "text-foreground";
-
+  const tone = remaining <= 300 ? "text-destructive" : remaining <= 600 ? "text-chart-4" : "text-foreground";
   return (
-    <div className="flex items-center gap-5 tabular-nums">
-      <div>
-        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Tempo restante</div>
-        <div className={`text-sm font-medium ${tone}`}>{format(remaining)}</div>
-      </div>
-      <div>
-        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Consulta</div>
-        <div className="text-sm font-medium">{format(seconds)}</div>
-      </div>
+    <div className="flex items-center gap-3 tabular-nums" aria-live="polite">
+      <div className="hidden text-right sm:block"><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Restante</div><div className={`text-sm font-medium ${tone}`}>{format(remaining)}</div></div>
+      <div><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Consulta</div><div className="text-sm font-medium">{format(seconds)}</div></div>
     </div>
   );
 }
