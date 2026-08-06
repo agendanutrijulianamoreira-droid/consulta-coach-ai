@@ -13,7 +13,7 @@ import { buildMealPlan, defaultMacros } from "@/modules/plano/domain/meal-plan-e
 import { blobToBase64, startRecording, type AudioRecorder } from "@/modules/transcricao/recorder";
 import * as db from "@/lib/nutrios/repository";
 import { analyzeConsultation, describeMealPlan, extractAnamnesis, generateClinicalSummary, interpretAnthropometry, transcribeChunk } from "@/lib/nutrios/ai.functions";
-import { MEAL_SLOT_LABELS, RESTRICTION_OPTIONS, type AnamnesisFields, type MealPlan, type RecallItem } from "@/lib/nutrios/types";
+import { MEAL_SLOT_LABELS, RESTRICTION_OPTIONS, type AnamnesisFields, type Food, type MealPlan, type RecallItem } from "@/lib/nutrios/types";
 
 export const Route = createFileRoute("/consulta/$id")({
   head: () => ({ meta: [
