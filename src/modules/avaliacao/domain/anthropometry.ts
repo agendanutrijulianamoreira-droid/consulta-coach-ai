@@ -259,7 +259,7 @@ function durninConstants(age: number, male: boolean) {
 export interface AnthroResult {
   label: string;
   value: string;
-  detail?: string;
+  detail?: string | undefined;
 }
 
 export interface AnthroAnalysis {
