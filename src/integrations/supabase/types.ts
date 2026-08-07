@@ -86,6 +86,7 @@ export type Database = {
           carb_g: number | null
           consultation_id: string
           created_at: string
+          energy: Json
           fat_g: number | null
           goal: string | null
           id: string
@@ -102,6 +103,7 @@ export type Database = {
           carb_g?: number | null
           consultation_id: string
           created_at?: string
+          energy?: Json
           fat_g?: number | null
           goal?: string | null
           id?: string
@@ -118,6 +120,7 @@ export type Database = {
           carb_g?: number | null
           consultation_id?: string
           created_at?: string
+          energy?: Json
           fat_g?: number | null
           goal?: string | null
           id?: string
@@ -465,6 +468,7 @@ export type Database = {
           consultation_id: string
           created_at: string
           id: string
+          report: string | null
           sections: Json
           updated_at: string
         }
@@ -472,6 +476,7 @@ export type Database = {
           consultation_id: string
           created_at?: string
           id?: string
+          report?: string | null
           sections?: Json
           updated_at?: string
         }
@@ -479,6 +484,7 @@ export type Database = {
           consultation_id?: string
           created_at?: string
           id?: string
+          report?: string | null
           sections?: Json
           updated_at?: string
         }
