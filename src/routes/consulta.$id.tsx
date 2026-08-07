@@ -79,7 +79,7 @@ function ConsultationPage() {
       setRecall((await db.listRecall(id)) as RecallItem[]);
       const diagnoses = await db.getDiagnoses(id); setHypotheses(diagnoses.hypotheses); setFlags(diagnoses.recall_flags);
       const saved = await db.getConduct(id);
-      if (saved) { setConduct(saved); if (saved.energy && Object.keys(saved.energy).length) setEnergy({ ...DEFAULT_ENERGY, ...(saved.energy as EnergyInputs) }); }
+      if (saved) { setConduct(saved); if (saved.energy && Object.keys(saved.energy).length) setEnergy({ ...DEFAULT_ENERGY, ...(saved.energy as unknown as Partial<EnergyInputs>) }); }
       const savedPlan = await db.getMealPlan(id); if (savedPlan) setPlan({ plan: savedPlan.plan, rationale: savedPlan.rationale });
       setLoaded(true);
     })().catch((error: Error) => toast.error(error.message));
@@ -90,8 +90,8 @@ function ConsultationPage() {
     if (step !== 3) return;
     setEnergy((current) => ({
       ...current,
-      weight: current.weight ?? Number(String(anthro["peso"] ?? "").replace(",", ".")) || null,
-      height: current.height ?? Number(String(anthro["altura"] ?? "").replace(",", ".")) || null,
+      weight: current.weight ?? (Number(String(anthro["peso"] ?? "").replace(",", ".")) || null),
+      height: current.height ?? (Number(String(anthro["altura"] ?? "").replace(",", ".")) || null),
       age: current.age ?? profile.age,
       leanMass: current.leanMass ?? analysis.leanMass,
       male: current.male || isMale(profile.sex),
