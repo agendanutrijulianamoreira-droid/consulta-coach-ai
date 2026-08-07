@@ -111,9 +111,6 @@ export interface ConductInput {
 
 /** Campos da anamnese extraídos automaticamente da transcrição. */
 export const ANAMNESIS_FIELDS = [
-  { key: "nome", label: "Nome" },
-  { key: "idade", label: "Idade" },
-  { key: "profissao", label: "Profissão" },
   { key: "queixa_principal", label: "Queixa principal" },
   { key: "historia_doenca", label: "História da doença" },
   { key: "sintomas", label: "Sintomas" },

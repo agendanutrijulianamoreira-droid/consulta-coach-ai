@@ -121,18 +121,8 @@ export async function saveAnamnesis(consultationId: string, fields: AnamnesisFie
   if (error) throw new Error(error.message);
 }
 
-export interface AnthropometryData {
-  peso?: string;
-  altura?: string;
-  cintura?: string;
-  quadril?: string;
-  braco?: string;
-  dobras?: string;
-  bioimpedancia?: string;
-  gordura?: string;
-  massa_muscular?: string;
-  agua_corporal?: string;
-}
+/** Medidas da avaliação: chaves definidas em ANTHRO_SECTIONS, valores como texto. */
+export type AnthropometryData = Record<string, string | undefined>;
 
 export async function getAnthropometry(consultationId: string) {
   const { data, error } = await supabase
@@ -210,12 +200,13 @@ export interface ConductRow {
   preferences: string[];
   restrictions: string[];
   notes: string | null;
+  energy?: Record<string, unknown>;
 }
 
 export async function getConduct(consultationId: string) {
   const { data, error } = await supabase
     .from("conducts")
-    .select("phase, kcal, protein_g, carb_g, fat_g, meals_count, goal, preferences, restrictions, notes")
+    .select("phase, kcal, protein_g, carb_g, fat_g, meals_count, goal, preferences, restrictions, notes, energy")
     .eq("consultation_id", consultationId)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -225,7 +216,7 @@ export async function getConduct(consultationId: string) {
 export async function saveConduct(consultationId: string, conduct: ConductRow) {
   const { error } = await supabase
     .from("conducts")
-    .upsert({ consultation_id: consultationId, ...conduct }, { onConflict: "consultation_id" });
+    .upsert(json({ consultation_id: consultationId, ...conduct }), { onConflict: "consultation_id" });
   if (error) throw new Error(error.message);
 }
 
@@ -280,16 +271,27 @@ export async function saveMealPlan(consultationId: string, plan: MealPlan, ratio
 export async function getRecord(consultationId: string) {
   const { data, error } = await supabase
     .from("records")
-    .select("sections")
+    .select("sections, report")
     .eq("consultation_id", consultationId)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  return (data?.sections ?? null) as Record<string, string> | null;
+  return {
+    sections: (data?.sections ?? null) as Record<string, string> | null,
+    report: ((data as { report?: string | null } | null)?.report ?? "") as string,
+  };
 }
 
 export async function saveRecord(consultationId: string, sections: Record<string, string>) {
   const { error } = await supabase
     .from("records")
     .upsert({ consultation_id: consultationId, sections: json(sections) }, { onConflict: "consultation_id" });
+  if (error) throw new Error(error.message);
+}
+
+/** Guarda o parecer nutricional final (markdown) do prontuário. */
+export async function saveReport(consultationId: string, report: string) {
+  const { error } = await supabase
+    .from("records")
+    .upsert(json({ consultation_id: consultationId, report }), { onConflict: "consultation_id" });
   if (error) throw new Error(error.message);
 }
