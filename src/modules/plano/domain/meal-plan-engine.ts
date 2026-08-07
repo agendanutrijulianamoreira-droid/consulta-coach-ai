@@ -242,3 +242,33 @@ export function defaultMacros(kcal: number): { protein_g: number; carb_g: number
     fat_g: Math.round((kcal * 0.3) / 9),
   };
 }
+
+/** Recalcula totais e lista de compras após edições manuais no cardápio. */
+export function recalculatePlan(meals: PlannedMeal[]): MealPlan {
+  const withTotals = meals.map((meal) => ({
+    ...meal,
+    totals: meal.items.reduce((acc, item) => addMacros(acc, item.macros), emptyMacros()),
+  }));
+  return {
+    meals: withTotals,
+    totals: withTotals.reduce((acc, meal) => addMacros(acc, meal.totals), emptyMacros()),
+    shopping_list: buildShoppingList(withTotals),
+    recipes: [],
+  };
+}
+
+/** Ajusta a quantidade de um item, escalando os macros proporcionalmente. */
+export function scaleItem(item: MealPlanItem, grams: number): MealPlanItem {
+  const safe = Math.max(1, grams);
+  const factor = safe / (item.grams || safe);
+  return {
+    ...item,
+    grams: round(safe),
+    macros: {
+      kcal: round(item.macros.kcal * factor),
+      protein_g: round(item.macros.protein_g * factor, 1),
+      carb_g: round(item.macros.carb_g * factor, 1),
+      fat_g: round(item.macros.fat_g * factor, 1),
+    },
+  };
+}
