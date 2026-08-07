@@ -74,6 +74,35 @@ export interface AudioRecorder {
 }
 
 /**
+ * Gravação avulsa para ditado: captura até o `stop()` e devolve um único WAV.
+ * Reaproveita o mesmo pipeline PCM da consulta, garantindo um arquivo completo.
+ */
+export async function startSingleRecording(): Promise<{ stop: () => Promise<Blob> }> {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const context = new AudioContext();
+  const source = context.createMediaStreamSource(stream);
+  const processor = context.createScriptProcessor(4096, 1, 1);
+  const buffer: Float32Array[] = [];
+
+  processor.onaudioprocess = (event) => {
+    buffer.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+  };
+  source.connect(processor);
+  processor.connect(context.destination);
+
+  return {
+    stop: async () => {
+      const wav = encodeWav(buffer, context.sampleRate);
+      processor.disconnect();
+      source.disconnect();
+      stream.getTracks().forEach((track) => track.stop());
+      await context.close();
+      return wav;
+    },
+  };
+}
+
+/**
  * Inicia a gravação. `onWindow` recebe um WAV completo a cada `windowMs`.
  * A gravação nunca é interrompida automaticamente — só pelo `stop()`.
  */

@@ -8,11 +8,96 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 const ANAMNESIS_KEYS = [
-  "nome", "idade", "profissao", "queixa_principal", "historia_doenca", "sintomas",
+  "queixa_principal", "historia_doenca", "sintomas",
   "medicamentos", "suplementos", "exames", "doencas", "alergias", "intolerancias",
   "rotina", "sono", "estresse", "exercicio", "agua", "evacuacao", "objetivos",
   "motivacao", "preferencias", "restricoes_alimentares",
 ] as const;
+
+async function transcribeWav(audioBase64: string) {
+  const apiKey = process.env["LOVABLE_API_KEY"];
+  if (!apiKey) throw new Error("LOVABLE_API_KEY ausente");
+  const binary = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
+  const form = new FormData();
+  form.append("model", "openai/gpt-4o-transcribe");
+  form.append("file", new Blob([binary], { type: "audio/wav" }), "trecho.wav");
+  form.append("language", "pt");
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/audio/transcriptions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${apiKey}` },
+    body: form,
+  });
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`Falha na transcrição (${response.status}): ${detail.slice(0, 200)}`);
+  }
+  const result = (await response.json()) as { text?: string };
+  return (result.text ?? "").trim();
+}
+
+/** Ditado simples: devolve o texto falado, sem separar interlocutores. */
+export const dictate = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) => z.object({ audioBase64: z.string().min(1) }).parse(input))
+  .handler(async ({ data }) => ({ text: await transcribeWav(data.audioBase64) }));
+
+/** Converte a fala do recordatório em linhas estruturadas por refeição. */
+export const structureRecall = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) => z.object({ transcript: z.string().min(1) }).parse(input))
+  .handler(async ({ data }) => {
+    const { callAiJson } = await import("@/lib/ai-gateway.server");
+    const parsed = await callAiJson<{ items: { time_label: string; foods: string; amount: string; preparation: string }[] }>({
+      instructions:
+        "Você organiza recordatórios alimentares de 24 horas em português do Brasil. A partir do relato, " +
+        "monte uma linha por refeição com horário, alimentos, quantidade relatada e modo de preparo. " +
+        "Use apenas o que foi dito; deixe o campo vazio quando não houver informação. Não invente alimentos.",
+      input: data.transcript.slice(-12000),
+      schema: {
+        name: "recordatorio",
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["items"],
+          properties: {
+            items: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["time_label", "foods", "amount", "preparation"],
+                properties: {
+                  time_label: { type: "string" },
+                  foods: { type: "string" },
+                  amount: { type: "string" },
+                  preparation: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    return { items: parsed?.items ?? [] };
+  });
+
+/** Parecer nutricional completo para entregar ao paciente. */
+export const generateReport = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z.object({ patient: z.string(), anamnesis: z.string(), anthropometry: z.string(), energy: z.string(), diagnosis: z.string(), plan: z.string() }).parse(input),
+  )
+  .handler(async ({ data }) => {
+    const { callAi } = await import("@/lib/ai-gateway.server");
+    const text = await callAi({
+      instructions:
+        "Redija um PARECER NUTRICIONAL completo em português do Brasil, dirigido ao paciente, em markdown, com estes " +
+        "títulos em '## ': Identificação, Avaliação antropométrica, Composição corporal, Necessidades energéticas, " +
+        "Interpretação clínica, Prioridades do acompanhamento, Orientações práticas, Observações finais. " +
+        "Use apenas os números fornecidos, sem inventar medidas nem alimentos. Linguagem acolhedora, clara e técnica " +
+        "quando necessário. Finalize com a observação de que o documento não substitui consulta médica.",
+      input: `Paciente:\n${data.patient}\n\nAnamnese:\n${data.anamnesis}\n\nAntropometria e análises:\n${data.anthropometry}\n\nCálculos energéticos:\n${data.energy}\n\nDiagnóstico e sinalizações:\n${data.diagnosis}\n\nPlano alimentar:\n${data.plan}`,
+      effort: "medium",
+    });
+    return { report: text };
+  });
 
 function anamnesisSchema() {
   const properties: Record<string, unknown> = {};
