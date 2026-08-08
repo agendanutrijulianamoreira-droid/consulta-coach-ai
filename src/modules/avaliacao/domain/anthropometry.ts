@@ -154,26 +154,132 @@ export function isMale(sex: string | null | undefined) {
   return (sex ?? "").toLowerCase().startsWith("m");
 }
 
-/** Classificação do IMC (OMS, adultos). */
-export function bmiClass(bmi: number): string {
-  if (bmi < 16) return "Magreza grau III";
-  if (bmi < 17) return "Magreza grau II";
-  if (bmi < 18.5) return "Magreza grau I";
-  if (bmi < 25) return "Eutrófico";
-  if (bmi < 30) return "Sobrepeso";
-  if (bmi < 35) return "Obesidade grau I";
-  if (bmi < 40) return "Obesidade grau II";
-  return "Obesidade grau III";
+/**
+ * Classificação do IMC.
+ * Adultos (20-59 anos): OMS (1995/2000).
+ * Idosos (>= 60 anos): Lipschitz (1994), adotada pelo SISVAN/MS.
+ */
+export function bmiClass(bmi: number, age: number | null = null): string {
+  if (age !== null && age >= 60) {
+    if (bmi < 22) return "Magreza (Lipschitz, idoso)";
+    if (bmi <= 27) return "Eutrofia (Lipschitz, idoso)";
+    return "Excesso de peso (Lipschitz, idoso)";
+  }
+  if (bmi < 16) return "Magreza grau III (OMS)";
+  if (bmi < 17) return "Magreza grau II (OMS)";
+  if (bmi < 18.5) return "Magreza grau I (OMS)";
+  if (bmi < 25) return "Eutrofia (OMS)";
+  if (bmi < 30) return "Sobrepeso (OMS)";
+  if (bmi < 35) return "Obesidade grau I (OMS)";
+  if (bmi < 40) return "Obesidade grau II (OMS)";
+  return "Obesidade grau III (OMS)";
 }
 
-/** Classificação do percentual de gordura (Lohman / ACSM, adultos). */
-export function bodyFatClass(percent: number, male: boolean): string {
-  const limits = male ? [6, 15, 20, 25] : [14, 23, 28, 33];
-  if (percent < limits[0]!) return "Muito baixa";
-  if (percent < limits[1]!) return "Baixa / atlética";
-  if (percent < limits[2]!) return "Adequada";
-  if (percent < limits[3]!) return "Acima do ideal";
-  return "Muito alta";
+/**
+ * Classificação do percentual de gordura por faixa etária e sexo biológico.
+ * Referência: Gallagher et al. (2000), Am J Clin Nutr — pontos de corte de
+ * gordura corporal correspondentes ao IMC de risco, por idade e sexo.
+ */
+export function bodyFatClass(percent: number, male: boolean, age: number | null = null): string {
+  const a = age ?? 30;
+  const band = a < 40 ? 0 : a < 60 ? 1 : 2;
+  const table: Record<"m" | "f", number[][]> = {
+    m: [
+      [8, 20, 25],
+      [11, 22, 28],
+      [13, 25, 30],
+    ],
+    f: [
+      [21, 33, 39],
+      [23, 34, 40],
+      [24, 36, 42],
+    ],
+  };
+  const [low, high, obese] = table[male ? "m" : "f"][band]!;
+  const ref = `Gallagher, ${a < 40 ? "20-39" : a < 60 ? "40-59" : "60-79"} anos`;
+  if (percent < low!) return `Abaixo do recomendado (${ref})`;
+  if (percent < high!) return `Adequado (${ref})`;
+  if (percent < obese!) return `Acima do ideal (${ref})`;
+  return `Obesidade por adiposidade (${ref})`;
+}
+
+/**
+ * Risco cardiometabólico pela relação cintura/quadril, por idade e sexo.
+ * Referência: Bray & Gray (1988) apud Heyward & Stolarczyk — pontos de corte
+ * de risco alto por faixa etária.
+ */
+export function whrRiskClass(whr: number, male: boolean, age: number | null = null): string {
+  const a = age ?? 30;
+  const cuts = male
+    ? [
+        [29, 0.94],
+        [39, 0.96],
+        [49, 1.0],
+        [59, 1.02],
+        [200, 1.03],
+      ]
+    : [
+        [29, 0.82],
+        [39, 0.84],
+        [49, 0.88],
+        [59, 0.9],
+        [200, 0.91],
+      ];
+  const cut = (cuts.find(([limit]) => a <= limit!) ?? cuts[cuts.length - 1]!)[1]!;
+  const band = a < 30 ? "20-29" : a < 40 ? "30-39" : a < 50 ? "40-49" : a < 60 ? "50-59" : "60-69";
+  return whr >= cut
+    ? `Risco alto (≥ ${cut} · ${band} anos)`
+    : whr >= cut - 0.06
+      ? `Risco moderado (corte ${cut} · ${band} anos)`
+      : `Risco baixo (corte ${cut} · ${band} anos)`;
+}
+
+/**
+ * Percentil 50 de referência de CMB (cm) e AMB (cm²) por idade e sexo.
+ * Referência: Frisancho AR (1981/1990), tabelas antropométricas NHANES.
+ */
+function frisanchoP50(age: number | null, male: boolean): { cmb: number; amb: number } {
+  const a = age ?? 30;
+  const rows: [number, number, number][] = male
+    ? [
+        [24, 27.9, 54.5],
+        [34, 28.6, 58.3],
+        [44, 28.7, 58.8],
+        [54, 28.1, 56.9],
+        [64, 27.8, 55.4],
+        [200, 26.8, 52.0],
+      ]
+    : [
+        [24, 21.2, 30.9],
+        [34, 21.8, 32.8],
+        [44, 22.0, 33.5],
+        [54, 22.5, 35.1],
+        [64, 22.5, 35.4],
+        [200, 22.5, 34.7],
+      ];
+  const row = rows.find(([limit]) => a <= limit) ?? rows[rows.length - 1]!;
+  return { cmb: row[1], amb: row[2] };
+}
+
+/** Classificação de adequação (Blackburn & Thornton, 1979) sobre o P50 de Frisancho. */
+function adequacyClass(measured: number, reference: number): { percent: number; label: string } {
+  const percent = round((measured / reference) * 100, 1);
+  const label =
+    percent >= 110
+      ? "Acima da referência"
+      : percent >= 90
+        ? "Eutrofia"
+        : percent >= 80
+          ? "Depleção leve"
+          : percent >= 70
+            ? "Depleção moderada"
+            : "Depleção grave";
+  return { percent, label };
+}
+
+/** Classificação da gordura visceral por índice de bioimpedância (Tanita). */
+function visceralClass(value: number): string {
+  return value <= 9 ? "Saudável (1-9 · Tanita)" : value <= 14 ? "Elevado (10-14 · Tanita)" : "Muito elevado (≥ 15 · Tanita)";
 }
 
 function siri(density: number) {
@@ -308,13 +414,29 @@ export function analyzeAnthropometry(
   const triceps = num(data["d_tricipital"]);
   const cmb = arm && triceps ? round(arm - Math.PI * (triceps / 10), 1) : null;
   const amb = cmb ? round((cmb * cmb) / (4 * Math.PI) - (male ? 10 : 6.5), 1) : null;
+  const reference = frisanchoP50(profile.age, male);
+  const cmbAdequacy = cmb ? adequacyClass(cmb, reference.cmb) : null;
+  const ambAdequacy = amb && amb > 0 ? adequacyClass(amb, reference.amb) : null;
 
   const skinfold = bodyFatByFormula(data, profile, formula);
-  const biaFat = num(data["bia_gordura_pct"]);
+  // Bioimpedância: o percentual informado já gera massa gorda e massa magra em kg
+  // (e vice-versa, quando a balança informa apenas a massa gorda).
+  const biaFatRaw = num(data["bia_gordura_pct"]);
+  const biaFatMassRaw = num(data["bia_massa_gorda"]);
+  const biaFat = biaFatRaw ?? (weight && biaFatMassRaw ? round((biaFatMassRaw / weight) * 100, 1) : null);
+  const biaFatMass = biaFatMassRaw ?? (weight && biaFat ? round((weight * biaFat) / 100, 1) : null);
+  const biaLeanMass =
+    num(data["bia_mlg"]) ?? (weight && biaFatMass !== null ? round(weight - biaFatMass, 1) : null);
+  const biaMusclePct =
+    num(data["bia_musculo_pct"]) ??
+    (weight && num(data["bia_musculo"]) ? round((num(data["bia_musculo"])! / weight) * 100, 1) : null);
+  const biaMuscle =
+    num(data["bia_musculo"]) ??
+    (weight && num(data["bia_musculo_pct"]) ? round((weight * num(data["bia_musculo_pct"])!) / 100, 1) : null);
   const bodyFatPercent = skinfold?.percent ?? biaFat ?? null;
 
   const fatMass = weight && bodyFatPercent ? round((weight * bodyFatPercent) / 100, 1) : null;
-  const leanMass = weight && fatMass !== null ? round(weight - fatMass, 1) : num(data["bia_mlg"]);
+  const leanMass = weight && fatMass !== null ? round(weight - fatMass, 1) : biaLeanMass;
 
   const wrist = num(data["dia_punho"]);
   const femur = num(data["dia_femur"]);
@@ -326,7 +448,7 @@ export function analyzeAnthropometry(
   const muscleMass =
     weight && fatMass !== null && boneMass !== null && residualMass !== null
       ? round(weight - fatMass - boneMass - residualMass, 1)
-      : num(data["bia_musculo"]);
+      : biaMuscle;
 
   // Água corporal total — fórmula de Watson.
   const totalWater =
@@ -346,7 +468,7 @@ export function analyzeAnthropometry(
         { label: "Peso atual", value: fmt(weight, "kg") },
         { label: "Altura atual", value: fmt(heightCm, "cm", 0) },
         { label: "Índice de Massa Corporal", value: fmt(bmi, "kg/m²") },
-        { label: "Classificação do IMC", value: bmi ? bmiClass(bmi) : dash },
+        { label: "Classificação do IMC", value: bmi ? bmiClass(bmi, profile.age) : dash },
         {
           label: "Faixa de peso ideal",
           value: idealWeightRange ? `${idealWeightRange[0]} a ${idealWeightRange[1]} kg` : dash,
@@ -354,20 +476,38 @@ export function analyzeAnthropometry(
         {
           label: "Relação cintura/quadril (RCQ)",
           value: fmt(whr, "", 2),
-          detail: whr ? (whr > whrLimit ? "Risco aumentado" : "Adequado") : undefined,
+          detail: whr ? whrRiskClass(whr, male, profile.age) : undefined,
         },
         {
           label: "Circunferência da cintura",
           value: fmt(waist, "cm"),
-          detail: waist ? (waist > waistLimit ? `Acima do limite (${waistLimit} cm)` : "Adequada") : undefined,
+          detail: waist
+            ? waist >= (male ? 102 : 88)
+              ? `Risco muito aumentado (≥ ${male ? 102 : 88} cm · OMS)`
+              : waist >= waistLimit
+                ? `Risco aumentado (≥ ${waistLimit} cm · OMS)`
+                : `Adequada (< ${waistLimit} cm · OMS)`
+            : undefined,
         },
         {
           label: "Circunferência abdominal",
           value: fmt(abdomen, "cm"),
           detail: abdomen ? (abdomen > (male ? 102 : 88) ? "Risco metabólico elevado" : "Adequada") : undefined,
         },
-        { label: "Circunferência muscular do braço (CMB)", value: fmt(cmb, "cm") },
-        { label: "Área muscular do braço (AMB)", value: fmt(amb, "cm²") },
+        {
+          label: "Circunferência muscular do braço (CMB)",
+          value: fmt(cmb, "cm"),
+          detail: cmbAdequacy
+            ? `${cmbAdequacy.percent}% do P50 (${reference.cmb} cm · Frisancho ${profile.age ?? "?"} anos, ${male ? "masc." : "fem."}) · ${cmbAdequacy.label}`
+            : "Informe braço relaxado, dobra tricipital, idade e sexo no cadastro",
+        },
+        {
+          label: "Área muscular do braço (AMB)",
+          value: fmt(amb, "cm²"),
+          detail: ambAdequacy
+            ? `${ambAdequacy.percent}% do P50 (${reference.amb} cm² · Frisancho) · ${ambAdequacy.label}`
+            : undefined,
+        },
       ],
     },
     {
@@ -376,7 +516,7 @@ export function analyzeAnthropometry(
         {
           label: "Percentual de gordura",
           value: fmt(skinfold?.percent ?? null, "%"),
-          detail: `${SKINFOLD_FORMULA_LABELS[formula]}${skinfold ? ` · ${bodyFatClass(skinfold.percent, male)}` : ""}`,
+          detail: `${SKINFOLD_FORMULA_LABELS[formula]}${skinfold ? ` · ${bodyFatClass(skinfold.percent, male, profile.age)}` : ""}`,
         },
         { label: "Densidade corporal", value: skinfold?.density ? String(skinfold.density) : dash },
         {
@@ -397,20 +537,29 @@ export function analyzeAnthropometry(
         {
           label: "Percentual de gordura",
           value: fmt(biaFat, "%"),
-          detail: biaFat ? bodyFatClass(biaFat, male) : undefined,
+          detail: biaFat
+            ? `${bodyFatClass(biaFat, male, profile.age)}${biaFatRaw === null ? " · derivado da massa gorda" : ""}`
+            : undefined,
         },
-        { label: "Massa gorda", value: fmt(num(data["bia_massa_gorda"]), "kg") },
-        { label: "Percentual de massa muscular", value: fmt(num(data["bia_musculo_pct"]), "%") },
-        { label: "Massa muscular", value: fmt(num(data["bia_musculo"]), "kg") },
-        { label: "Massa livre de gordura", value: fmt(num(data["bia_mlg"]), "kg") },
+        {
+          label: "Massa gorda",
+          value: fmt(biaFatMass, "kg"),
+          detail: biaFatMassRaw === null && biaFatMass !== null ? "Calculada a partir do % de gordura" : undefined,
+        },
+        { label: "Percentual de massa muscular", value: fmt(biaMusclePct, "%") },
+        { label: "Massa muscular", value: fmt(biaMuscle, "kg") },
+        {
+          label: "Massa livre de gordura (massa magra)",
+          value: fmt(biaLeanMass, "kg"),
+          detail: num(data["bia_mlg"]) === null && biaLeanMass !== null ? "Peso menos massa gorda" : undefined,
+        },
         { label: "Peso ósseo", value: fmt(num(data["bia_peso_osseo"]), "kg") },
         {
           label: "Índice de gordura visceral",
           value: fmt(num(data["bia_visceral"]), "", 0),
           detail: (() => {
             const v = num(data["bia_visceral"]);
-            if (!v) return undefined;
-            return v <= 5 ? "Ideal" : v <= 9 ? "Moderado — atenção" : "Elevado";
+            return v ? visceralClass(v) : undefined;
           })(),
         },
         { label: "Água corporal", value: fmt(num(data["bia_agua"]), "L") },
