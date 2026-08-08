@@ -49,8 +49,32 @@ export async function listPatients() {
   ) as Patient[];
 }
 
-export async function createPatient(input: { name: string; birth_date?: string | null; sex?: string | null; phone?: string | null }) {
+export type PatientInput = {
+  name: string;
+  birth_date?: string | null;
+  sex?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  notes?: string | null;
+};
+
+export async function createPatient(input: PatientInput) {
   return unwrap(await supabase.from("patients").insert(input).select().single()) as Patient;
+}
+
+export async function updatePatient(id: string, input: PatientInput) {
+  return unwrap(await supabase.from("patients").update(input).eq("id", id).select().single()) as Patient;
+}
+
+/** Remove o paciente. Falha se já existirem consultas vinculadas (integridade clínica). */
+export async function deletePatient(id: string) {
+  const { error } = await supabase.from("patients").delete().eq("id", id);
+  if (error) {
+    if (error.message.includes("foreign key") || error.message.includes("violates")) {
+      throw new Error("Este paciente possui consultas registradas e não pode ser excluído.");
+    }
+    throw new Error(error.message);
+  }
 }
 
 export async function listConsultations() {
