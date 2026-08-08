@@ -1,12 +1,23 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, ArrowRight, CalendarClock, Search, Users } from "lucide-react";
+import { Activity, ArrowRight, CalendarClock, Pencil, Plus, Search, Trash2, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/nutrios/app-shell";
+import { PatientDialog } from "@/components/nutrios/patient-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createConsultation, createPatient, listConsultations, listPatients } from "@/lib/nutrios/repository";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { createConsultation, deletePatient, listConsultations, listPatients, type Patient } from "@/lib/nutrios/repository";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -25,8 +36,10 @@ export const Route = createFileRoute("/")({
 function Home() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [name, setName] = useState("");
   const [search, setSearch] = useState("");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<Patient | null>(null);
+  const [removing, setRemoving] = useState<Patient | null>(null);
   const patients = useQuery({ queryKey: ["patients"], queryFn: listPatients });
   const consultations = useQuery({ queryKey: ["consultations"], queryFn: listConsultations });
   const filteredPatients = useMemo(
@@ -34,12 +47,12 @@ function Home() {
     [patients.data, search],
   );
 
-  const addPatient = useMutation({
-    mutationFn: () => createPatient({ name: name.trim() }),
+  const removePatient = useMutation({
+    mutationFn: (id: string) => deletePatient(id),
     onSuccess: () => {
-      setName("");
+      setRemoving(null);
       void queryClient.invalidateQueries({ queryKey: ["patients"] });
-      toast.success("Paciente cadastrado.");
+      toast.success("Paciente excluído.");
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -64,10 +77,9 @@ function Home() {
           </div>
         </header>
 
-        <form className="mt-6 flex flex-col gap-2 sm:flex-row" onSubmit={(event) => { event.preventDefault(); if (name.trim()) addPatient.mutate(); }}>
-          <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Nome do novo paciente" aria-label="Nome do novo paciente" className="sm:max-w-sm" />
-          <Button type="submit" disabled={!name.trim() || addPatient.isPending}>{addPatient.isPending ? "Cadastrando…" : "Adicionar paciente"}</Button>
-        </form>
+        <div className="mt-6">
+          <Button onClick={() => { setEditing(null); setDialogOpen(true); }}><Plus /> Novo paciente</Button>
+        </div>
 
         <div className="mt-8 grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
           <section aria-labelledby="patients-heading">
@@ -78,8 +90,12 @@ function Home() {
             <div className="divide-y divide-border rounded-md border border-border">
               {filteredPatients.length ? filteredPatients.map((patient) => (
                 <div key={patient.id} className="flex items-center justify-between gap-3 px-3 py-3 text-sm">
-                  <div className="min-w-0"><p className="truncate font-medium">{patient.name}</p><p className="mt-0.5 text-xs text-muted-foreground">Paciente cadastrado</p></div>
-                  <Button size="sm" variant="secondary" onClick={() => startConsultation.mutate(patient.id)} disabled={startConsultation.isPending}>Nova consulta <ArrowRight /></Button>
+                  <div className="min-w-0"><p className="truncate font-medium">{patient.name}</p><p className="mt-0.5 truncate text-xs text-muted-foreground">{describePatient(patient)}</p></div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button size="icon" variant="ghost" aria-label={`Editar ${patient.name}`} onClick={() => { setEditing(patient); setDialogOpen(true); }}><Pencil /></Button>
+                    <Button size="icon" variant="ghost" aria-label={`Excluir ${patient.name}`} onClick={() => setRemoving(patient)}><Trash2 /></Button>
+                    <Button size="sm" variant="secondary" onClick={() => startConsultation.mutate(patient.id)} disabled={startConsultation.isPending}>Nova consulta <ArrowRight /></Button>
+                  </div>
                 </div>
               )) : <p className="px-3 py-8 text-sm text-muted-foreground">{search ? "Nenhum paciente encontrado." : "Nenhum paciente ainda."}</p>}
             </div>
@@ -98,6 +114,21 @@ function Home() {
           </section>
         </div>
       </div>
+      <PatientDialog open={dialogOpen} onOpenChange={setDialogOpen} patient={editing} />
+      <AlertDialog open={!!removing} onOpenChange={(open) => !open && setRemoving(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir {removing?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>Esta ação não pode ser desfeita. Pacientes com consultas registradas não podem ser excluídos.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={(event) => { event.preventDefault(); if (removing) removePatient.mutate(removing.id); }} disabled={removePatient.isPending}>
+              {removePatient.isPending ? "Excluindo…" : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppShell>
   );
 }
@@ -108,4 +139,17 @@ function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; 
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
+}
+
+/** Resumo textual do cadastro (idade, sexo, contato) exibido na listagem. */
+function describePatient(patient: Patient) {
+  const parts: string[] = [];
+  if (patient.birth_date) {
+    const age = Math.floor((Date.now() - new Date(patient.birth_date).getTime()) / 31557600000);
+    if (Number.isFinite(age) && age >= 0) parts.push(`${age} anos`);
+  }
+  if (patient.sex) parts.push(patient.sex === "feminino" ? "Feminino" : "Masculino");
+  if (patient.phone) parts.push(patient.phone);
+  if (patient.email) parts.push(patient.email);
+  return parts.join(" · ") || "Cadastro incompleto";
 }
