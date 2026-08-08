@@ -100,7 +100,7 @@ export function PatientDialog({
             <Input id="patient-birth" type="date" value={form.birth_date ?? ""} onChange={(e) => set("birth_date")(e.target.value)} />
           </Field>
           <Field id="patient-sex" label="Sexo biológico">
-            <Select value={form.sex || undefined} onValueChange={set("sex")}>
+            <Select {...(form.sex ? { value: form.sex } : {})} onValueChange={set("sex")}>
               <SelectTrigger id="patient-sex"><SelectValue placeholder="Selecione" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="feminino">Feminino</SelectItem>
