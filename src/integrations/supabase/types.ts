@@ -146,6 +146,7 @@ export type Database = {
       consultations: {
         Row: {
           clinical_summary: string | null
+          consultation_date: string
           created_at: string
           current_step: string
           duration_seconds: number
@@ -158,6 +159,7 @@ export type Database = {
         }
         Insert: {
           clinical_summary?: string | null
+          consultation_date?: string
           created_at?: string
           current_step?: string
           duration_seconds?: number
@@ -170,6 +172,7 @@ export type Database = {
         }
         Update: {
           clinical_summary?: string | null
+          consultation_date?: string
           created_at?: string
           current_step?: string
           duration_seconds?: number
@@ -379,35 +382,47 @@ export type Database = {
       patients: {
         Row: {
           birth_date: string | null
+          cpf: string | null
           created_at: string
           email: string | null
           id: string
+          is_pregnant: boolean
           name: string
           notes: string | null
           phone: string | null
+          pregnancy_weeks: number | null
           sex: string | null
+          tags: string[]
           updated_at: string
         }
         Insert: {
           birth_date?: string | null
+          cpf?: string | null
           created_at?: string
           email?: string | null
           id?: string
+          is_pregnant?: boolean
           name: string
           notes?: string | null
           phone?: string | null
+          pregnancy_weeks?: number | null
           sex?: string | null
+          tags?: string[]
           updated_at?: string
         }
         Update: {
           birth_date?: string | null
+          cpf?: string | null
           created_at?: string
           email?: string | null
           id?: string
+          is_pregnant?: boolean
           name?: string
           notes?: string | null
           phone?: string | null
+          pregnancy_weeks?: number | null
           sex?: string | null
+          tags?: string[]
           updated_at?: string
         }
         Relationships: []
