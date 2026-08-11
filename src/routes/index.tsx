@@ -17,7 +17,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { createConsultation, deletePatient, listConsultations, listPatients, type Patient } from "@/lib/nutrios/repository";
+import { Badge } from "@/components/ui/badge";
+import {
+  createConsultation,
+  deletePatient,
+  listConsultationDates,
+  listConsultations,
+  listPatients,
+  type Patient,
+} from "@/lib/nutrios/repository";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -40,12 +48,26 @@ function Home() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Patient | null>(null);
   const [removing, setRemoving] = useState<Patient | null>(null);
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const patients = useQuery({ queryKey: ["patients"], queryFn: listPatients });
   const consultations = useQuery({ queryKey: ["consultations"], queryFn: listConsultations });
-  const filteredPatients = useMemo(
-    () => (patients.data ?? []).filter((patient) => patient.name.toLowerCase().includes(search.trim().toLowerCase())),
-    [patients.data, search],
+  const consultationDates = useQuery({ queryKey: ["consultation-dates"], queryFn: listConsultationDates });
+  const stats = useMemo(() => summarize(consultationDates.data ?? []), [consultationDates.data]);
+  const allTags = useMemo(
+    () => Array.from(new Set((patients.data ?? []).flatMap((patient) => patient.tags ?? []))).sort(),
+    [patients.data],
   );
+  const filteredPatients = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return (patients.data ?? []).filter((patient) => {
+      const matchesTerm =
+        !term ||
+        patient.name.toLowerCase().includes(term) ||
+        (patient.cpf ?? "").replace(/\D/g, "").includes(term.replace(/\D/g, "")) && !!term.replace(/\D/g, "");
+      const matchesTag = !tagFilter || (patient.tags ?? []).includes(tagFilter);
+      return matchesTerm && matchesTag;
+    });
+  }, [patients.data, search, tagFilter]);
 
   const removePatient = useMutation({
     mutationFn: (id: string) => deletePatient(id),
@@ -58,7 +80,10 @@ function Home() {
   });
   const startConsultation = useMutation({
     mutationFn: (patientId: string) => createConsultation(patientId),
-    onSuccess: (consultation) => navigate({ to: "/consulta/$id", params: { id: consultation.id } }),
+    onSuccess: (consultation) => {
+      void queryClient.invalidateQueries({ queryKey: ["consultation-dates"] });
+      navigate({ to: "/consulta/$id", params: { id: consultation.id } });
+    },
     onError: (error: Error) => toast.error(error.message),
   });
 
@@ -81,16 +106,41 @@ function Home() {
           <Button onClick={() => { setEditing(null); setDialogOpen(true); }}><Plus /> Novo paciente</Button>
         </div>
 
+        <section aria-label="Volume de consultas" className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Metric icon={<CalendarClock />} label="Hoje" value={stats.today} />
+          <Metric icon={<CalendarClock />} label="Esta semana" value={stats.week} />
+          <Metric icon={<CalendarClock />} label="Este mês" value={stats.month} />
+          <Metric icon={<Activity />} label="Média mensal (12m)" value={stats.monthlyAverage} />
+        </section>
+
         <div className="mt-8 grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
           <section aria-labelledby="patients-heading">
             <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div><h2 id="patients-heading" className="text-sm font-semibold">Cadastrados</h2><p className="mt-1 text-xs text-muted-foreground">Selecione um paciente para abrir uma consulta.</p></div>
               <div className="relative sm:w-56"><Search className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar paciente" aria-label="Buscar paciente" className="h-8 pl-8 text-xs" /></div>
             </div>
+            {allTags.length ? (
+              <div className="mb-3 flex flex-wrap gap-1.5">
+                <Badge variant={tagFilter ? "outline" : "secondary"} className="cursor-pointer" onClick={() => setTagFilter(null)}>Todas</Badge>
+                {allTags.map((tag) => (
+                  <Badge key={tag} variant={tagFilter === tag ? "secondary" : "outline"} className="cursor-pointer" onClick={() => setTagFilter(tagFilter === tag ? null : tag)}>
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
             <div className="divide-y divide-border rounded-md border border-border">
               {filteredPatients.length ? filteredPatients.map((patient) => (
                 <div key={patient.id} className="flex items-center justify-between gap-3 px-3 py-3 text-sm">
-                  <div className="min-w-0"><p className="truncate font-medium">{patient.name}</p><p className="mt-0.5 truncate text-xs text-muted-foreground">{describePatient(patient)}</p></div>
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{patient.name}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{describePatient(patient)}</p>
+                    {patient.tags?.length ? (
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {patient.tags.map((tag) => <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>)}
+                      </div>
+                    ) : null}
+                  </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <Button size="icon" variant="ghost" aria-label={`Editar ${patient.name}`} onClick={() => { setEditing(patient); setDialogOpen(true); }}><Pencil /></Button>
                     <Button size="icon" variant="ghost" aria-label={`Excluir ${patient.name}`} onClick={() => setRemoving(patient)}><Trash2 /></Button>
@@ -106,7 +156,7 @@ function Home() {
             <div className="divide-y divide-border rounded-md border border-border">
               {consultations.data?.length ? consultations.data.map((consultation) => (
                 <Button key={consultation.id} variant="ghost" className="h-auto w-full justify-between rounded-none px-3 py-3 text-left" onClick={() => navigate({ to: "/consulta/$id", params: { id: consultation.id } })}>
-                  <span className="min-w-0"><span className="block truncate font-medium">{consultation.patients?.name ?? "Paciente"}</span><span className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"><CalendarClock className="size-3" />{formatDate(consultation.created_at)}</span></span>
+                  <span className="min-w-0"><span className="block truncate font-medium">{consultation.patients?.name ?? "Paciente"}</span><span className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"><CalendarClock className="size-3" />{formatDate(consultation.consultation_date ?? consultation.created_at)}</span></span>
                   <span className="shrink-0 text-xs text-muted-foreground">{consultation.status === "finalizada" ? "Finalizada" : "Em aberto"}</span>
                 </Button>
               )) : <p className="px-3 py-8 text-sm text-muted-foreground">Nenhuma consulta registrada.</p>}
@@ -138,7 +188,29 @@ function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; 
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value));
+  const date = value.length === 10 ? new Date(`${value}T12:00:00`) : new Date(value);
+  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(date);
+}
+
+/** Consolida o volume de consultas por dia, semana, mês e média mensal dos últimos 12 meses. */
+function summarize(rows: { consultation_date: string }[]) {
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+  const weekStart = startOfWeek.toISOString().slice(0, 10);
+  const monthStart = `${today.slice(0, 7)}-01`;
+  const yearAgo = new Date(now);
+  yearAgo.setFullYear(now.getFullYear() - 1);
+  const yearStart = yearAgo.toISOString().slice(0, 10);
+
+  const lastYear = rows.filter((row) => row.consultation_date >= yearStart).length;
+  return {
+    today: rows.filter((row) => row.consultation_date === today).length,
+    week: rows.filter((row) => row.consultation_date >= weekStart).length,
+    month: rows.filter((row) => row.consultation_date >= monthStart).length,
+    monthlyAverage: Math.round((lastYear / 12) * 10) / 10,
+  };
 }
 
 /** Resumo textual do cadastro (idade, sexo, contato) exibido na listagem. */
@@ -149,6 +221,8 @@ function describePatient(patient: Patient) {
     if (Number.isFinite(age) && age >= 0) parts.push(`${age} anos`);
   }
   if (patient.sex) parts.push(patient.sex === "feminino" ? "Feminino" : "Masculino");
+  if (patient.is_pregnant) parts.push(patient.pregnancy_weeks ? `Gestante · ${patient.pregnancy_weeks} sem` : "Gestante");
+  if (patient.cpf) parts.push(patient.cpf);
   if (patient.phone) parts.push(patient.phone);
   if (patient.email) parts.push(patient.email);
   return parts.join(" · ") || "Cadastro incompleto";
