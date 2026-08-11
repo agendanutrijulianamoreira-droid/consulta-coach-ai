@@ -10,6 +10,8 @@ export const Route = createFileRoute("/receitas")({
       { name: "description", content: "Receitas cadastradas e usadas pelo motor de plano alimentar." },
       { property: "og:title", content: "Receitas — NutriOS" },
       { property: "og:description", content: "Modo de preparo, rendimento e macros por receita." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: RecipesPage,

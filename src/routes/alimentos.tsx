@@ -10,6 +10,8 @@ export const Route = createFileRoute("/alimentos")({
       { name: "description", content: "Base própria de alimentos usada pelo motor de regras do plano alimentar." },
       { property: "og:title", content: "Base de alimentos — NutriOS" },
       { property: "og:description", content: "Porções, medidas caseiras e macros da base clínica." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: FoodsPage,

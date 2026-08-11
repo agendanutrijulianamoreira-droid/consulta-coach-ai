@@ -23,7 +23,7 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
-      <aside className="hidden w-56 shrink-0 flex-col border-r border-border px-3 py-4 md:flex">
+      <aside className="hidden w-56 shrink-0 flex-col border-r border-border px-3 py-4 md:flex print:hidden">
         <Link to="/" className="mb-8 px-2 text-sm font-semibold tracking-tight">
           NutriOS
         </Link>
@@ -40,18 +40,18 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
         </div>
       </aside>
       <main className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center justify-between border-b border-border px-4 py-3 md:hidden">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3 md:hidden print:hidden">
           <Link to="/" className="text-sm font-semibold tracking-tight">NutriOS</Link>
           <Button variant="ghost" size="icon" onClick={toggle} aria-label={dark ? "Ativar tema claro" : "Ativar tema escuro"}>
             {dark ? <Sun /> : <Moon />}
           </Button>
         </div>
         {title ? (
-          <header className="flex min-h-12 items-center border-b border-border px-4 text-sm font-medium md:px-6">
+          <header className="flex min-h-12 items-center border-b border-border px-4 text-sm font-medium md:px-6 print:hidden">
             {title}
           </header>
         ) : null}
-        <div className="border-b border-border px-3 py-2 md:hidden">
+        <div className="border-b border-border px-3 py-2 md:hidden print:hidden">
           <nav aria-label="Navegação mobile" className="grid grid-cols-3 gap-1 text-xs">
             <NavItem to="/" icon={<Users className="size-3.5" />} label="Pacientes" />
             <NavItem to="/alimentos" icon={<Apple className="size-3.5" />} label="Alimentos" />
