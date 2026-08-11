@@ -17,6 +17,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -26,7 +28,27 @@ import {
 } from "@/components/ui/select";
 import { createPatient, updatePatient, type Patient, type PatientInput } from "@/lib/nutrios/repository";
 
-const EMPTY: PatientInput = { name: "", birth_date: "", sex: "", phone: "", email: "", notes: "" };
+const EMPTY: PatientInput = {
+  name: "",
+  birth_date: "",
+  sex: "",
+  phone: "",
+  email: "",
+  notes: "",
+  cpf: "",
+  is_pregnant: false,
+  pregnancy_weeks: null,
+  tags: [],
+};
+
+/** Máscara de CPF aplicada durante a digitação (000.000.000-00). */
+function maskCpf(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  return digits
+    .replace(/^(\d{3})(\d)/, "$1.$2")
+    .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d{1,2})$/, ".$1-$2");
+}
 
 export function PatientDialog({
   open,
@@ -39,9 +61,11 @@ export function PatientDialog({
 }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<PatientInput>(EMPTY);
+  const [tagDraft, setTagDraft] = useState("");
 
   useEffect(() => {
     if (!open) return;
+    setTagDraft("");
     setForm(
       patient
         ? {
@@ -51,12 +75,23 @@ export function PatientDialog({
             phone: patient.phone ?? "",
             email: patient.email ?? "",
             notes: patient.notes ?? "",
+            cpf: patient.cpf ?? "",
+            is_pregnant: patient.is_pregnant ?? false,
+            pregnancy_weeks: patient.pregnancy_weeks ?? null,
+            tags: patient.tags ?? [],
           }
         : EMPTY,
     );
   }, [open, patient]);
 
   const set = (key: keyof PatientInput) => (value: string) => setForm((prev) => ({ ...prev, [key]: value }));
+
+  const addTag = () => {
+    const tag = tagDraft.trim().toLowerCase();
+    if (!tag) return;
+    setForm((prev) => ({ ...prev, tags: prev.tags?.includes(tag) ? prev.tags : [...(prev.tags ?? []), tag] }));
+    setTagDraft("");
+  };
 
   const save = useMutation({
     mutationFn: async () => {
@@ -67,6 +102,10 @@ export function PatientDialog({
         phone: form.phone?.trim() ? form.phone.trim() : null,
         email: form.email?.trim() ? form.email.trim() : null,
         notes: form.notes?.trim() ? form.notes.trim() : null,
+        cpf: form.cpf?.trim() ? form.cpf.trim() : null,
+        is_pregnant: !!form.is_pregnant,
+        pregnancy_weeks: form.is_pregnant && form.pregnancy_weeks ? Number(form.pregnancy_weeks) : null,
+        tags: form.tags ?? [],
       };
       return patient ? updatePatient(patient.id, payload) : createPatient(payload);
     },
@@ -108,11 +147,76 @@ export function PatientDialog({
               </SelectContent>
             </Select>
           </Field>
+          <Field id="patient-cpf" label="CPF">
+            <Input
+              id="patient-cpf"
+              inputMode="numeric"
+              value={form.cpf ?? ""}
+              onChange={(e) => set("cpf")(maskCpf(e.target.value))}
+              placeholder="000.000.000-00"
+            />
+          </Field>
           <Field id="patient-phone" label="Telefone">
             <Input id="patient-phone" value={form.phone ?? ""} onChange={(e) => set("phone")(e.target.value)} placeholder="(00) 00000-0000" />
           </Field>
           <Field id="patient-email" label="E-mail">
             <Input id="patient-email" type="email" value={form.email ?? ""} onChange={(e) => set("email")(e.target.value)} />
+          </Field>
+          {form.sex !== "masculino" && (
+            <>
+              <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
+                <Label htmlFor="patient-pregnant" className="text-xs text-muted-foreground">Gestante</Label>
+                <Switch
+                  id="patient-pregnant"
+                  checked={!!form.is_pregnant}
+                  onCheckedChange={(checked) => setForm((prev) => ({ ...prev, is_pregnant: checked, pregnancy_weeks: checked ? prev.pregnancy_weeks : null }))}
+                />
+              </div>
+              <Field id="patient-weeks" label="Semanas de gestação">
+                <Input
+                  id="patient-weeks"
+                  type="number"
+                  min={1}
+                  max={42}
+                  disabled={!form.is_pregnant}
+                  value={form.pregnancy_weeks ?? ""}
+                  onChange={(e) => setForm((prev) => ({ ...prev, pregnancy_weeks: e.target.value ? Number(e.target.value) : null }))}
+                />
+              </Field>
+            </>
+          )}
+          <Field className="sm:col-span-2" id="patient-tags" label="Tags (para filtrar pacientes)">
+            <div className="grid gap-2">
+              <div className="flex gap-2">
+                <Input
+                  id="patient-tags"
+                  value={tagDraft}
+                  onChange={(e) => setTagDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === ",") {
+                      e.preventDefault();
+                      addTag();
+                    }
+                  }}
+                  placeholder="ex.: emagrecimento, gestante, esportista"
+                />
+                <Button type="button" variant="secondary" onClick={addTag}>Adicionar</Button>
+              </div>
+              {form.tags?.length ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {form.tags.map((tag) => (
+                    <Badge
+                      key={tag}
+                      variant="secondary"
+                      className="cursor-pointer"
+                      onClick={() => setForm((prev) => ({ ...prev, tags: (prev.tags ?? []).filter((t) => t !== tag) }))}
+                    >
+                      {tag} ✕
+                    </Badge>
+                  ))}
+                </div>
+              ) : null}
+            </div>
           </Field>
           <Field className="sm:col-span-2" id="patient-notes" label="Observações">
             <Textarea id="patient-notes" rows={3} value={form.notes ?? ""} onChange={(e) => set("notes")(e.target.value)} placeholder="Histórico relevante, encaminhamentos, convênio…" />
