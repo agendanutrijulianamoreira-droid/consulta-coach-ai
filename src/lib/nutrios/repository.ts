@@ -16,6 +16,10 @@ export interface Patient {
   phone: string | null;
   email: string | null;
   notes: string | null;
+  cpf: string | null;
+  is_pregnant: boolean;
+  pregnancy_weeks: number | null;
+  tags: string[];
   created_at: string;
 }
 
@@ -24,6 +28,7 @@ export interface Consultation {
   patient_id: string;
   status: string;
   current_step: string;
+  consultation_date: string;
   started_at: string | null;
   ended_at: string | null;
   duration_seconds: number;
@@ -56,6 +61,10 @@ export type PatientInput = {
   phone?: string | null;
   email?: string | null;
   notes?: string | null;
+  cpf?: string | null;
+  is_pregnant?: boolean;
+  pregnancy_weeks?: number | null;
+  tags?: string[];
 };
 
 export async function createPatient(input: PatientInput) {
@@ -91,6 +100,13 @@ export async function createConsultation(patientId: string) {
   return unwrap(
     await supabase.from("consultations").insert({ patient_id: patientId }).select().single(),
   ) as Consultation;
+}
+
+/** Datas de todas as consultas — base dos indicadores de volume (dia/semana/mês/ano). */
+export async function listConsultationDates() {
+  return unwrap(
+    await supabase.from("consultations").select("consultation_date").order("consultation_date", { ascending: false }),
+  ) as { consultation_date: string }[];
 }
 
 export async function getConsultation(id: string) {
