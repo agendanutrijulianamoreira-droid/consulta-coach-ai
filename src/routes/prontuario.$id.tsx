@@ -91,7 +91,7 @@ function RecordPage() {
             <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Parecer nutricional</h1>
             <p className="mt-2 text-sm text-muted-foreground">{patient?.name ?? "Paciente"} · {formatDate(consultation.data?.consultation_date)}</p>
           </div>
-          <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => void shareReport()}><Share2 /> Compartilhar</Button><Button variant="outline" size="sm" onClick={() => window.print()}><Printer /> Imprimir / PDF</Button><Button size="sm" onClick={() => void saveReport()} disabled={saving || !reportDirty}><Save /> {saving ? "Salvando…" : "Salvar parecer"}</Button></div>
+          <div className="flex flex-wrap gap-2"><Link to="/parecer/$id" params={{ id }}><Button size="sm" variant="secondary"><FileText /> Parecer do paciente</Button></Link><Button variant="outline" size="sm" onClick={() => void shareReport()}><Share2 /> Compartilhar</Button><Button variant="outline" size="sm" onClick={() => window.print()}><Printer /> Imprimir / PDF</Button><Button size="sm" onClick={() => void saveReport()} disabled={saving || !reportDirty}><Save /> {saving ? "Salvando…" : "Salvar parecer"}</Button></div>
         </div>
 
         <article className="space-y-8 print:space-y-5">
