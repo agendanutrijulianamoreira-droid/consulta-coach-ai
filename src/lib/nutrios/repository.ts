@@ -163,12 +163,6 @@ export async function getPatientDossier(patientId: string) {
   return empty;
 }
 
-function _unusedGetConsultation(id: string) {
-  return unwrap(
-    await supabase.from("consultations").select("*, patients(*)").eq("id", id).single(),
-  ) as Consultation & { patients: Patient };
-}
-
 export async function updateConsultation(id: string, patch: Partial<Consultation>) {
   const { error } = await supabase.from("consultations").update(patch).eq("id", id);
   if (error) throw new Error(error.message);
