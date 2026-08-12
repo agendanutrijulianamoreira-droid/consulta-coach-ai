@@ -96,10 +96,28 @@ export async function listConsultations() {
   ) as (Consultation & { patients: { name: string } | null })[];
 }
 
-export async function createConsultation(patientId: string) {
+export async function createConsultation(patientId: string, consultationDate?: string) {
+  const payload = consultationDate
+    ? { patient_id: patientId, consultation_date: consultationDate }
+    : { patient_id: patientId };
   return unwrap(
-    await supabase.from("consultations").insert({ patient_id: patientId }).select().single(),
+    await supabase.from("consultations").insert(payload).select().single(),
   ) as Consultation;
+}
+
+export async function getPatient(id: string) {
+  return unwrap(await supabase.from("patients").select("*").eq("id", id).single()) as Patient;
+}
+
+/** Histórico completo de consultas de um paciente (ordem cronológica inversa). */
+export async function listPatientConsultations(patientId: string) {
+  return unwrap(
+    await supabase
+      .from("consultations")
+      .select("*")
+      .eq("patient_id", patientId)
+      .order("consultation_date", { ascending: false }),
+  ) as Consultation[];
 }
 
 /** Datas de todas as consultas — base dos indicadores de volume (dia/semana/mês/ano). */
