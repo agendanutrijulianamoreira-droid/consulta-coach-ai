@@ -167,7 +167,7 @@ function PatientPage() {
   );
 }
 
-function Row({ label, value }: { label: string; value?: string | null }) {
+function Row({ label, value }: { label: string; value?: string | null | undefined }) {
   return (
     <div className="flex items-center justify-between gap-3">
       <dt className="text-xs text-muted-foreground">{label}</dt>
