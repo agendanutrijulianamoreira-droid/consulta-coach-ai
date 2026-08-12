@@ -96,10 +96,27 @@ export async function listConsultations() {
   ) as (Consultation & { patients: { name: string } | null })[];
 }
 
-export async function createConsultation(patientId: string) {
+export async function createConsultation(patientId: string, consultationDate?: string) {
+  const payload: { patient_id: string; consultation_date?: string } = { patient_id: patientId };
+  if (consultationDate) payload.consultation_date = consultationDate;
   return unwrap(
-    await supabase.from("consultations").insert({ patient_id: patientId }).select().single(),
+    await supabase.from("consultations").insert(payload).select().single(),
   ) as Consultation;
+}
+
+export async function getPatient(id: string) {
+  return unwrap(await supabase.from("patients").select("*").eq("id", id).single()) as Patient;
+}
+
+/** Histórico completo de consultas de um paciente (ordem cronológica inversa). */
+export async function listPatientConsultations(patientId: string) {
+  return unwrap(
+    await supabase
+      .from("consultations")
+      .select("*")
+      .eq("patient_id", patientId)
+      .order("consultation_date", { ascending: false }),
+  ) as Consultation[];
 }
 
 /** Datas de todas as consultas — base dos indicadores de volume (dia/semana/mês/ano). */
@@ -113,6 +130,37 @@ export async function getConsultation(id: string) {
   return unwrap(
     await supabase.from("consultations").select("*, patients(*)").eq("id", id).single(),
   ) as Consultation & { patients: Patient };
+}
+
+/**
+ * Dossiê do paciente: histórico de consultas + materiais gerados (antropometria,
+ * parecer e cardápio) em uma única leitura, para a ficha personalizada.
+ */
+export async function getPatientDossier(patientId: string) {
+  const consultations = await listPatientConsultations(patientId);
+  const ids = consultations.map((c) => c.id);
+  const empty = { consultations, anthro: {}, reports: {}, plans: {} } as {
+    consultations: Consultation[];
+    anthro: Record<string, Record<string, string | undefined>>;
+    reports: Record<string, string>;
+    plans: Record<string, { kcal?: number }>;
+  };
+  if (!ids.length) return empty;
+  const [anthroRows, recordRows, planRows] = await Promise.all([
+    supabase.from("anthropometry").select("consultation_id, data").in("consultation_id", ids),
+    supabase.from("records").select("consultation_id, report").in("consultation_id", ids),
+    supabase.from("meal_plans").select("consultation_id, totals").in("consultation_id", ids),
+  ]);
+  for (const row of (anthroRows.data ?? []) as { consultation_id: string; data: unknown }[]) {
+    empty.anthro[row.consultation_id] = (row.data ?? {}) as Record<string, string | undefined>;
+  }
+  for (const row of (recordRows.data ?? []) as { consultation_id: string; report: string | null }[]) {
+    if (row.report) empty.reports[row.consultation_id] = row.report;
+  }
+  for (const row of (planRows.data ?? []) as { consultation_id: string; totals: unknown }[]) {
+    empty.plans[row.consultation_id] = (row.totals ?? {}) as { kcal?: number };
+  }
+  return empty;
 }
 
 export async function updateConsultation(id: string, patch: Partial<Consultation>) {

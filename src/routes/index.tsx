@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, ArrowRight, CalendarClock, Pencil, Plus, Search, Trash2, Users } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -133,7 +133,9 @@ function Home() {
               {filteredPatients.length ? filteredPatients.map((patient) => (
                 <div key={patient.id} className="flex items-center justify-between gap-3 px-3 py-3 text-sm">
                   <div className="min-w-0">
-                    <p className="truncate font-medium">{patient.name}</p>
+                    <Link to="/paciente/$id" params={{ id: patient.id }} className="block truncate font-medium hover:underline">
+                      {patient.name}
+                    </Link>
                     <p className="mt-0.5 truncate text-xs text-muted-foreground">{describePatient(patient)}</p>
                     {patient.tags?.length ? (
                       <div className="mt-1 flex flex-wrap gap-1">

@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AlimentosRouteImport } from './routes/alimentos'
 import { Route as ReceitasRouteImport } from './routes/receitas'
 import { Route as ConsultaIdRouteImport } from './routes/consulta.$id'
+import { Route as PacienteIdRouteImport } from './routes/paciente.$id'
 import { Route as ProntuarioIdRouteImport } from './routes/prontuario.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -35,6 +36,11 @@ const ConsultaIdRoute = ConsultaIdRouteImport.update({
   path: '/consulta/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PacienteIdRoute = PacienteIdRouteImport.update({
+  id: '/paciente/$id',
+  path: '/paciente/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProntuarioIdRoute = ProntuarioIdRouteImport.update({
   id: '/prontuario/$id',
   path: '/prontuario/$id',
@@ -46,6 +52,7 @@ export interface FileRoutesByFullPath {
   '/alimentos': typeof AlimentosRoute
   '/receitas': typeof ReceitasRoute
   '/consulta/$id': typeof ConsultaIdRoute
+  '/paciente/$id': typeof PacienteIdRoute
   '/prontuario/$id': typeof ProntuarioIdRoute
 }
 export interface FileRoutesByTo {
@@ -53,6 +60,7 @@ export interface FileRoutesByTo {
   '/alimentos': typeof AlimentosRoute
   '/receitas': typeof ReceitasRoute
   '/consulta/$id': typeof ConsultaIdRoute
+  '/paciente/$id': typeof PacienteIdRoute
   '/prontuario/$id': typeof ProntuarioIdRoute
 }
 export interface FileRoutesById {
@@ -61,20 +69,33 @@ export interface FileRoutesById {
   '/alimentos': typeof AlimentosRoute
   '/receitas': typeof ReceitasRoute
   '/consulta/$id': typeof ConsultaIdRoute
+  '/paciente/$id': typeof PacienteIdRoute
   '/prontuario/$id': typeof ProntuarioIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/alimentos' | '/receitas' | '/consulta/$id' | '/prontuario/$id'
+    | '/'
+    | '/alimentos'
+    | '/receitas'
+    | '/consulta/$id'
+    | '/paciente/$id'
+    | '/prontuario/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/alimentos' | '/receitas' | '/consulta/$id' | '/prontuario/$id'
+  to:
+    | '/'
+    | '/alimentos'
+    | '/receitas'
+    | '/consulta/$id'
+    | '/paciente/$id'
+    | '/prontuario/$id'
   id:
     | '__root__'
     | '/'
     | '/alimentos'
     | '/receitas'
     | '/consulta/$id'
+    | '/paciente/$id'
     | '/prontuario/$id'
   fileRoutesById: FileRoutesById
 }
@@ -83,6 +104,7 @@ export interface RootRouteChildren {
   AlimentosRoute: typeof AlimentosRoute
   ReceitasRoute: typeof ReceitasRoute
   ConsultaIdRoute: typeof ConsultaIdRoute
+  PacienteIdRoute: typeof PacienteIdRoute
   ProntuarioIdRoute: typeof ProntuarioIdRoute
 }
 
@@ -116,6 +138,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConsultaIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/paciente/$id': {
+      id: '/paciente/$id'
+      path: '/paciente/$id'
+      fullPath: '/paciente/$id'
+      preLoaderRoute: typeof PacienteIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/prontuario/$id': {
       id: '/prontuario/$id'
       path: '/prontuario/$id'
@@ -131,6 +160,7 @@ const rootRouteChildren: RootRouteChildren = {
   AlimentosRoute: AlimentosRoute,
   ReceitasRoute: ReceitasRoute,
   ConsultaIdRoute: ConsultaIdRoute,
+  PacienteIdRoute: PacienteIdRoute,
   ProntuarioIdRoute: ProntuarioIdRoute,
 }
 export const routeTree = rootRouteImport
