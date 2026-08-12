@@ -97,9 +97,8 @@ export async function listConsultations() {
 }
 
 export async function createConsultation(patientId: string, consultationDate?: string) {
-  const payload = consultationDate
-    ? { patient_id: patientId, consultation_date: consultationDate }
-    : { patient_id: patientId };
+  const payload: { patient_id: string; consultation_date?: string } = { patient_id: patientId };
+  if (consultationDate) payload.consultation_date = consultationDate;
   return unwrap(
     await supabase.from("consultations").insert(payload).select().single(),
   ) as Consultation;
