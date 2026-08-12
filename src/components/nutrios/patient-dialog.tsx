@@ -4,6 +4,7 @@
  */
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,7 +27,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createPatient, updatePatient, type Patient, type PatientInput } from "@/lib/nutrios/repository";
+import {
+  createConsultation,
+  createPatient,
+  updatePatient,
+  type Patient,
+  type PatientInput,
+} from "@/lib/nutrios/repository";
 
 const EMPTY: PatientInput = {
   name: "",
@@ -60,12 +67,18 @@ export function PatientDialog({
   patient?: Patient | null;
 }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [form, setForm] = useState<PatientInput>(EMPTY);
   const [tagDraft, setTagDraft] = useState("");
+  /** Etapa pós-cadastro: pergunta se a consulta deve ser registrada já. */
+  const [created, setCreated] = useState<Patient | null>(null);
+  const [consultDate, setConsultDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   useEffect(() => {
     if (!open) return;
     setTagDraft("");
+    setCreated(null);
+    setConsultDate(new Date().toISOString().slice(0, 10));
     setForm(
       patient
         ? {
@@ -109,14 +122,57 @@ export function PatientDialog({
       };
       return patient ? updatePatient(patient.id, payload) : createPatient(payload);
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
       void queryClient.invalidateQueries({ queryKey: ["patients"] });
       void queryClient.invalidateQueries({ queryKey: ["consultation"] });
       toast.success(patient ? "Paciente atualizado." : "Paciente cadastrado.");
-      onOpenChange(false);
+      if (patient) onOpenChange(false);
+      else setCreated(saved);
     },
     onError: (error: Error) => toast.error(error.message),
   });
+
+  const startConsultation = useMutation({
+    mutationFn: async () => createConsultation(created!.id, consultDate),
+    onSuccess: (consultation) => {
+      void queryClient.invalidateQueries({ queryKey: ["consultations"] });
+      void queryClient.invalidateQueries({ queryKey: ["consultation-dates"] });
+      onOpenChange(false);
+      void navigate({ to: "/consulta/$id", params: { id: consultation.id } });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  if (created) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Registrar consulta de {created.name}?</DialogTitle>
+            <DialogDescription>Escolha a data do atendimento para já abrir a consulta, ou vá direto para a ficha do paciente.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-1.5">
+            <Label htmlFor="new-consult-date" className="text-xs text-muted-foreground">Data da consulta</Label>
+            <Input id="new-consult-date" type="date" value={consultDate} onChange={(e) => setConsultDate(e.target.value)} />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                onOpenChange(false);
+                void navigate({ to: "/paciente/$id", params: { id: created.id } });
+              }}
+            >
+              Abrir ficha
+            </Button>
+            <Button onClick={() => startConsultation.mutate()} disabled={startConsultation.isPending}>
+              {startConsultation.isPending ? "Abrindo…" : "Registrar consulta"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
