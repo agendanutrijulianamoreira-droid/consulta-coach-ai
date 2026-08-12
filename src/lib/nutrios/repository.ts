@@ -383,3 +383,24 @@ export async function saveReport(consultationId: string, report: string) {
     .upsert(json({ consultation_id: consultationId, report }), { onConflict: "consultation_id" });
   if (error) throw new Error(error.message);
 }
+/** Guarda o documento do parecer (JSON) dentro das seções do prontuário. */
+export async function saveParecer(consultationId: string, doc: unknown) {
+  const current = await getRecord(consultationId);
+  const sections = { ...(current.sections ?? {}), parecer: JSON.stringify(doc) };
+  const { error } = await supabase
+    .from("records")
+    .upsert(json({ consultation_id: consultationId, sections }), { onConflict: "consultation_id" });
+  if (error) throw new Error(error.message);
+}
+
+/** Lê o documento do parecer salvo, quando existir. */
+export async function getParecer<T>(consultationId: string): Promise<T | null> {
+  const current = await getRecord(consultationId);
+  const raw = current.sections?.["parecer"];
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
+  }
+}
