@@ -187,6 +187,7 @@ export function buildParecerMetrics(data: AnthroData, patient: ParecerPatient): 
     cmbClass: cmbPct !== null ? `${cmbClassification(cmbPct)} · ${cmbPct}% do padrão` : null,
     amb,
     score: compositionScore({ fatPct, musclePct, metabolicAge, age, visceral, whr, male }),
+    male,
   };
 }
 
