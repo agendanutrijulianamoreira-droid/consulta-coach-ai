@@ -132,6 +132,43 @@ export async function getConsultation(id: string) {
   ) as Consultation & { patients: Patient };
 }
 
+/**
+ * Dossiê do paciente: histórico de consultas + materiais gerados (antropometria,
+ * parecer e cardápio) em uma única leitura, para a ficha personalizada.
+ */
+export async function getPatientDossier(patientId: string) {
+  const consultations = await listPatientConsultations(patientId);
+  const ids = consultations.map((c) => c.id);
+  const empty = { consultations, anthro: {}, reports: {}, plans: {} } as {
+    consultations: Consultation[];
+    anthro: Record<string, Record<string, string | undefined>>;
+    reports: Record<string, string>;
+    plans: Record<string, { kcal?: number }>;
+  };
+  if (!ids.length) return empty;
+  const [anthroRows, recordRows, planRows] = await Promise.all([
+    supabase.from("anthropometry").select("consultation_id, data").in("consultation_id", ids),
+    supabase.from("records").select("consultation_id, report").in("consultation_id", ids),
+    supabase.from("meal_plans").select("consultation_id, totals").in("consultation_id", ids),
+  ]);
+  for (const row of (anthroRows.data ?? []) as { consultation_id: string; data: unknown }[]) {
+    empty.anthro[row.consultation_id] = (row.data ?? {}) as Record<string, string | undefined>;
+  }
+  for (const row of (recordRows.data ?? []) as { consultation_id: string; report: string | null }[]) {
+    if (row.report) empty.reports[row.consultation_id] = row.report;
+  }
+  for (const row of (planRows.data ?? []) as { consultation_id: string; totals: unknown }[]) {
+    empty.plans[row.consultation_id] = (row.totals ?? {}) as { kcal?: number };
+  }
+  return empty;
+}
+
+function _unusedGetConsultation(id: string) {
+  return unwrap(
+    await supabase.from("consultations").select("*, patients(*)").eq("id", id).single(),
+  ) as Consultation & { patients: Patient };
+}
+
 export async function updateConsultation(id: string, patch: Partial<Consultation>) {
   const { error } = await supabase.from("consultations").update(patch).eq("id", id);
   if (error) throw new Error(error.message);
