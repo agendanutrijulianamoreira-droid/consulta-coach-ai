@@ -40,6 +40,8 @@ function Consent() {
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -122,7 +124,7 @@ function Consent() {
   if (!signedIn) {
     return (
       <Shell>
-        <h1 className="text-xl font-semibold tracking-tight">Entrar no NutriOS</h1>
+        <h1 className="text-xl font-semibold tracking-tight">{mode === "signup" ? "Criar acesso ao NutriOS" : "Entrar no NutriOS"}</h1>
         <p className="mt-1 text-sm text-muted-foreground">Autentique-se para autorizar o aplicativo.</p>
         <form className="mt-6 space-y-4" onSubmit={signIn}>
           <div className="space-y-1.5">
@@ -134,7 +136,15 @@ function Consent() {
             <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" disabled={busy} className="w-full">Entrar</Button>
+          {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
+          <Button type="submit" disabled={busy} className="w-full">{mode === "signup" ? "Criar conta" : "Entrar"}</Button>
+          <button
+            type="button"
+            className="w-full text-center text-xs text-muted-foreground underline-offset-4 hover:underline"
+            onClick={() => { setMode(mode === "signup" ? "signin" : "signup"); setError(null); setNotice(null); }}
+          >
+            {mode === "signup" ? "Já tenho acesso" : "Criar meu acesso"}
+          </button>
         </form>
       </Shell>
     );
