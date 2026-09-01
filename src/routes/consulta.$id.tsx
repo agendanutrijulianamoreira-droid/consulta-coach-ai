@@ -1,8 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { AlertTriangle, ArrowLeft, ArrowRight, Check, ClipboardList, FileText, Mic, Save, Sparkles, Square, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, ClipboardList, Cloud, CloudOff, FileText, LoaderCircle, Mic, RefreshCw, Save, Sparkles, Square, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/nutrios/app-shell";
 import { ConsultationTimer } from "@/components/nutrios/consultation-timer";
@@ -15,21 +15,22 @@ import { analyzeAnthropometry, ageFromBirthDate, isMale, type AnthroData, type S
 import { DEFAULT_ENERGY, calculateEnergy, type EnergyInputs } from "@/modules/avaliacao/domain/energy";
 import { buildMealPlan, defaultMacros, recalculatePlan, scaleItem } from "@/modules/plano/domain/meal-plan-engine";
 import { blobToBase64, startRecording, type AudioRecorder } from "@/modules/transcricao/recorder";
+import { countPendingAudioWindows, listPendingAudioWindows, markPendingAudioAttempt, removePendingAudioWindow, savePendingAudioWindow, type PendingAudioWindow } from "@/modules/transcricao/pending-queue";
 import * as db from "@/lib/nutrios/repository";
 import { analyzeConsultation, describeMealPlan, extractAnamnesis, generateClinicalSummary, generateReport, interpretAnthropometry, structureRecall, transcribeChunk } from "@/lib/nutrios/ai.functions";
 import { MEAL_SLOT_LABELS, RESTRICTION_OPTIONS, type AnamnesisFields, type Food, type MealPlan, type RecallItem } from "@/lib/nutrios/types";
 
 export const Route = createFileRoute("/consulta/$id")({
   head: () => ({ meta: [
-    { title: "Consulta clínica — NutriOS" }, { name: "description", content: "Consulta clínica com transcrição, avaliação completa, cálculos energéticos e cardápio." },
-    { property: "og:title", content: "Consulta clínica — NutriOS" }, { property: "og:description", content: "Consulta clínica com transcrição, avaliação completa, cálculos energéticos e cardápio." },
+    { title: "Consulta clínica — Cach AI" }, { name: "description", content: "Consulta clínica com transcrição, avaliação completa, cálculos energéticos e cardápio." },
+    { property: "og:title", content: "Consulta clínica — Cach AI" }, { property: "og:description", content: "Consulta clínica com transcrição, avaliação completa, cálculos energéticos e cardápio." },
     { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" },
   ] }), component: ConsultationPage,
 });
 
 const STEPS = ["Consulta", "Anamnese", "Antropometria", "Cálculos", "Recordatório", "Diagnóstico", "Cardápio"] as const;
 const HINTS: Record<number, string> = {
-  0: "Capture a conversa e acompanhe a transcrição em tempo real.",
+  0: "Capture a conversa com salvamento local e sincronização automática.",
   1: "Revise cada sugestão antes de incorporar ao prontuário.",
   2: "Preencha as medidas: os resultados analíticos são calculados na hora.",
   3: "Escolha a fórmula e ajuste os fatores — o GET alimenta o cardápio.",
@@ -45,8 +46,15 @@ function ConsultationPage() {
   const [step, setStep] = useState(0);
   const [seconds, setSeconds] = useState(0);
   const [recording, setRecording] = useState(false);
+  const [recordingBusy, setRecordingBusy] = useState(false);
+  const [finalizingAudio, setFinalizingAudio] = useState(false);
+  const [processingCount, setProcessingCount] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [online, setOnline] = useState(true);
   const recorder = useRef<AudioRecorder | null>(null);
   const secondsRef = useRef(0);
+  const transcriptRef = useRef("");
+  const syncingRef = useRef(false);
   const transcribe = useServerFn(transcribeChunk);
   const consultation = useQuery({ queryKey: ["consultation", id], queryFn: () => db.getConsultation(id) });
   const segments = useQuery({ queryKey: ["segments", id], queryFn: () => db.listSegments(id), refetchInterval: recording ? 4000 : false });
@@ -85,7 +93,6 @@ function ConsultationPage() {
     })().catch((error: Error) => toast.error(error.message));
   }, [id]);
 
-  // Pré-preenchimento dos cálculos com o que já foi medido.
   useEffect(() => {
     if (step !== 3) return;
     setEnergy((current) => ({
@@ -98,7 +105,6 @@ function ConsultationPage() {
     }));
   }, [step, anthro, profile, analysis.leanMass]);
 
-  // O cardápio da última aba já chega montado com os dados anteriores.
   useEffect(() => {
     if (step !== 6 || plan || !loaded || !(foods.data?.length) || busy) return;
     void generatePlan(false);
@@ -114,25 +120,137 @@ function ConsultationPage() {
   const analysisText = analysis.groups.map((group) => `${group.title}\n${group.results.map((r) => `- ${r.label}: ${r.value}${r.detail ? ` (${r.detail})` : ""}`).join("\n")}`).join("\n\n");
   const energyText = `TMB (${energy.formula}): ${energyResult.bmr ?? "—"} kcal | Fator atividade: ${energy.activityFactor} | Fator injúria: ${energy.injuryFactor} | MET: ${energyResult.metKcal} kcal | Gestação/lactação: ${energyResult.pregnancyKcal} kcal | GET: ${energyResult.tee ?? "—"} kcal`;
 
-  const handleWindow = async (wav: Blob, offset: number) => {
+  useEffect(() => { transcriptRef.current = transcriptText; }, [transcriptText]);
+
+  const refreshPendingCount = useCallback(async () => {
     try {
-      const result = await transcribe({ data: { audioBase64: await blobToBase64(wav), context: transcriptText.slice(-1500) } });
-      if (!result.segments.length) return;
-      await db.insertSegments(id, result.segments.map((segment, index) => ({ ...segment, offset_seconds: offset, client_id: `${offset}-${index}` })));
-      void queryClient.invalidateQueries({ queryKey: ["segments", id] });
-    } catch (error) { toast.error((error as Error).message); }
-  };
-  const toggleRecording = async () => {
-    if (recording) {
-      await recorder.current?.stop(); recorder.current = null; setRecording(false);
-      await db.updateConsultation(id, { status: "gravada", duration_seconds: seconds, ended_at: new Date().toISOString() });
-      toast.success("Gravação encerrada."); return;
+      setPendingCount(await countPendingAudioWindows(id));
+    } catch {
+      setPendingCount(0);
     }
+  }, [id]);
+
+  const processPendingWindow = useCallback(async (windowItem: PendingAudioWindow) => {
+    setProcessingCount((value) => value + 1);
     try {
-      recorder.current = await startRecording((wav) => void handleWindow(wav, secondsRef.current)); setRecording(true);
-      await db.updateConsultation(id, { status: "em_andamento", started_at: new Date().toISOString() });
-    } catch { toast.error("Não foi possível acessar o microfone."); }
+      await markPendingAudioAttempt(windowItem.id);
+      const result = await transcribe({ data: { audioBase64: await blobToBase64(windowItem.audio), context: transcriptRef.current.slice(-1500) } });
+      if (result.segments.length) {
+        await db.insertSegments(id, result.segments.map((segment, index) => ({
+          ...segment,
+          offset_seconds: windowItem.offsetSeconds,
+          client_id: `${windowItem.id}-${index}`,
+        })));
+      }
+      await removePendingAudioWindow(windowItem.id);
+      await queryClient.invalidateQueries({ queryKey: ["segments", id] });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setProcessingCount((value) => Math.max(0, value - 1));
+      void refreshPendingCount();
+    }
+  }, [id, queryClient, refreshPendingCount, transcribe]);
+
+  const syncPending = useCallback(async () => {
+    if (syncingRef.current || !navigator.onLine) return;
+    syncingRef.current = true;
+    try {
+      const pending = await listPendingAudioWindows(id);
+      for (const item of pending) {
+        if (!navigator.onLine) break;
+        const completed = await processPendingWindow(item);
+        if (!completed) break;
+      }
+    } finally {
+      syncingRef.current = false;
+      await refreshPendingCount();
+    }
+  }, [id, processPendingWindow, refreshPendingCount]);
+
+  useEffect(() => {
+    setOnline(typeof navigator === "undefined" ? true : navigator.onLine);
+    void refreshPendingCount().then(() => syncPending());
+    const handleOnline = () => { setOnline(true); void syncPending(); };
+    const handleOffline = () => setOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [refreshPendingCount, syncPending]);
+
+  useEffect(() => {
+    const shouldWarn = recording || finalizingAudio || pendingCount > 0;
+    if (!shouldWarn) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [recording, finalizingAudio, pendingCount]);
+
+  const handleWindow = useCallback(async (wav: Blob, offset: number) => {
+    const item: PendingAudioWindow = {
+      id: crypto.randomUUID(),
+      consultationId: id,
+      offsetSeconds: offset,
+      createdAt: Date.now(),
+      attempts: 0,
+      audio: wav,
+    };
+    await savePendingAudioWindow(item);
+    await refreshPendingCount();
+    if (navigator.onLine) await processPendingWindow(item);
+  }, [id, processPendingWindow, refreshPendingCount]);
+
+  const toggleRecording = async () => {
+    if (recordingBusy) return;
+    setRecordingBusy(true);
+    try {
+      if (recording) {
+        setFinalizingAudio(true);
+        try {
+          await recorder.current?.stop();
+        } finally {
+          recorder.current = null;
+          setRecording(false);
+        }
+        await refreshPendingCount();
+        if (navigator.onLine) await syncPending();
+        await db.updateConsultation(id, { status: "gravada", duration_seconds: secondsRef.current, ended_at: new Date().toISOString() });
+        await queryClient.invalidateQueries({ queryKey: ["consultation", id] });
+        toast.success("Gravação encerrada e áudio preservado.");
+        return;
+      }
+
+      if (!navigator.mediaDevices?.getUserMedia) {
+        toast.error("Este navegador não disponibiliza acesso ao microfone. Use uma versão atualizada do Chrome, Edge ou Safari.");
+        return;
+      }
+
+      recorder.current = await startRecording(handleWindow, 12000, secondsRef.current);
+      setRecording(true);
+      await db.updateConsultation(id, { status: "em_andamento", started_at: consultation.data?.started_at ?? new Date().toISOString(), ended_at: null });
+      await queryClient.invalidateQueries({ queryKey: ["consultation", id] });
+    } catch (error) {
+      const name = error instanceof DOMException ? error.name : "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        toast.error("O acesso ao microfone foi bloqueado. Autorize o microfone para este site nas configurações do navegador e tente novamente.");
+      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        toast.error("Nenhum microfone foi encontrado neste dispositivo.");
+      } else {
+        toast.error(error instanceof Error ? error.message : "Não foi possível iniciar ou encerrar a gravação.");
+      }
+    } finally {
+      setFinalizingAudio(false);
+      setRecordingBusy(false);
+    }
   };
+
   const run = async (label: string, action: () => Promise<void>, message = "Alterações salvas.") => {
     setBusy(label);
     try { await action(); toast.success(message); }
@@ -188,17 +306,18 @@ function ConsultationPage() {
   const completed = [Boolean(segments.data?.length), Object.values(anamnesis).some((field) => field?.value && field.status !== "recusado"), Object.values(anthro).some(Boolean), Boolean(energyResult.tee), recall.length > 0, hypotheses.length > 0 || flags.length > 0, Boolean(plan)];
   const goNext = () => setStep((value) => Math.min(STEPS.length - 1, value + 1));
   const goPrevious = () => setStep((value) => Math.max(0, value - 1));
+  const operationalStatus = finalizingAudio ? "Finalizando áudio…" : recording ? "Gravando" : processingCount > 0 ? "Processando transcrição…" : pendingCount > 0 ? `${pendingCount} trecho${pendingCount === 1 ? "" : "s"} aguardando sincronização` : "Tudo sincronizado";
 
   return <AppShell>
     <div className="sticky top-0 z-10 border-b border-border bg-background/95 px-4 py-3 backdrop-blur sm:px-6">
-      <div className="flex items-center justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-medium">{patient?.name ?? "Consulta"}</div><div className="flex items-center gap-2 text-xs text-muted-foreground"><span className={`size-1.5 rounded-full ${recording ? "bg-destructive" : "bg-muted-foreground"}`} />{profile.age !== null ? `${profile.age} anos · ` : ""}{recording ? "Gravando e transcrevendo" : consultation.data?.status === "finalizada" ? "Consulta finalizada" : "Pronto para iniciar"}</div></div><div className="flex items-center gap-3"><ConsultationTimer seconds={seconds} running={recording} /><Button size="sm" variant={recording ? "destructive" : "default"} onClick={() => void toggleRecording()}>{recording ? <Square /> : <Mic />}{recording ? "Encerrar" : "Iniciar consulta"}</Button><Link to="/prontuario/$id" params={{ id }} className="hidden text-xs text-muted-foreground underline-offset-4 hover:underline sm:block">Prontuário</Link></div></div>
+      <div className="flex items-center justify-between gap-3"><div className="min-w-0"><div className="truncate text-sm font-medium">{patient?.name ?? "Consulta"}</div><div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span className={`size-1.5 rounded-full ${recording ? "bg-destructive" : "bg-muted-foreground"}`} />{profile.age !== null ? `${profile.age} anos · ` : ""}<span>{operationalStatus}</span><span aria-hidden="true">·</span><span className="inline-flex items-center gap-1">{online ? <Cloud className="size-3" /> : <CloudOff className="size-3" />}{online ? "Online" : "Offline"}</span></div></div><div className="flex items-center gap-3"><ConsultationTimer seconds={seconds} running={recording} /><Button size="sm" variant={recording ? "destructive" : "default"} disabled={recordingBusy} onClick={() => void toggleRecording()}>{finalizingAudio ? <LoaderCircle className="animate-spin" /> : recording ? <Square /> : <Mic />}{finalizingAudio ? "Finalizando…" : recording ? "Encerrar" : "Iniciar consulta"}</Button><Link to="/prontuario/$id" params={{ id }} className="hidden text-xs text-muted-foreground underline-offset-4 hover:underline sm:block">Prontuário</Link></div></div>
     </div>
     <div className="border-b border-border px-3 py-3 sm:px-6"><div className="mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto pb-1" role="tablist" aria-label="Etapas da consulta">{STEPS.map((label, index) => <Button key={label} type="button" role="tab" aria-selected={step === index} variant={step === index ? "secondary" : "ghost"} size="sm" className="shrink-0" onClick={() => setStep(index)}>{completed[index] ? <Check /> : <span className="text-[10px]">{index + 1}</span>}{label}</Button>)}</div></div>
 
     <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       <div className="mb-6 flex items-end justify-between gap-4"><div><p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Etapa {step + 1} de {STEPS.length}</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">{STEPS[step]}</h1><p className="mt-1 text-sm text-muted-foreground">{HINTS[step]}</p></div><div className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex"><ClipboardList className="size-4" />{completed.filter(Boolean).length}/{STEPS.length} etapas com dados</div></div>
 
-      {step === 0 ? <section className="grid gap-6 lg:grid-cols-[1fr_280px]"><div className="min-h-[360px] rounded-md border border-border"><div className="flex items-center justify-between border-b border-border px-4 py-3"><div><h2 className="text-sm font-medium">Transcrição da consulta</h2><p className="mt-0.5 text-xs text-muted-foreground">As falas aparecem conforme os trechos são processados.</p></div><span className="text-xs tabular-nums text-muted-foreground">{segments.data?.length ?? 0} falas</span></div><div className="space-y-3 p-4" aria-live="polite">{(segments.data ?? []).map((segment) => <p key={segment.id} className="text-sm leading-6"><span className={segment.speaker === "nutricionista" ? "font-medium text-primary" : "font-medium text-muted-foreground"}>{segment.speaker === "nutricionista" ? "Nutricionista" : "Paciente"}:</span>{" "}{segment.content}</p>)}{!segments.data?.length ? <div className="flex min-h-64 flex-col items-center justify-center text-center"><Mic className="size-6 text-muted-foreground" /><p className="mt-3 text-sm text-muted-foreground">Inicie a consulta para capturar a primeira fala.</p></div> : null}</div></div><aside className="space-y-3"><InfoCard icon={<Sparkles />} title="Revisão assistida" text="Use a transcrição para extrair a anamnese e revisar os dados antes de avançar." /><InfoCard icon={<FileText />} title="Ditado disponível" text="Todos os campos aceitam voz: use o botão de microfone ao lado de cada um." /></aside></section> : null}
+      {step === 0 ? <section className="grid gap-6 lg:grid-cols-[1fr_300px]"><div className="min-h-[360px] rounded-md border border-border"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3"><div><h2 className="text-sm font-medium">Transcrição da consulta</h2><p className="mt-0.5 text-xs text-muted-foreground">Cada trecho é preservado localmente antes de ser enviado para transcrição.</p></div><span className="text-xs tabular-nums text-muted-foreground">{segments.data?.length ?? 0} falas</span></div><div className="max-h-[560px] space-y-3 overflow-y-auto p-4" aria-live="polite">{(segments.data ?? []).map((segment) => <p key={segment.id} className="text-sm leading-6"><span className={segment.speaker === "nutricionista" ? "font-medium text-primary" : "font-medium text-muted-foreground"}>{segment.speaker === "nutricionista" ? "Nutricionista" : "Paciente"}:</span>{" "}{segment.content}</p>)}{!segments.data?.length ? <div className="flex min-h-64 flex-col items-center justify-center text-center"><Mic className="size-6 text-muted-foreground" /><p className="mt-3 text-sm text-muted-foreground">Inicie a consulta para capturar a primeira fala.</p><p className="mt-1 max-w-sm text-xs leading-5 text-muted-foreground">Se a conexão cair, o Cach AI continua preservando as janelas de áudio neste dispositivo e tenta sincronizar quando a internet voltar.</p></div> : null}</div></div><aside className="space-y-3"><div className="rounded-md border border-border p-4"><div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2 text-sm font-medium">{online ? <Cloud /> : <CloudOff />}{online ? "Conectado" : "Sem internet"}</div>{processingCount > 0 ? <LoaderCircle className="size-4 animate-spin text-muted-foreground" /> : null}</div><div className="mt-3 space-y-1.5 text-xs leading-5 text-muted-foreground"><p>{recording ? "Microfone ativo e gravação em andamento." : finalizingAudio ? "Aguardando o último trecho ser preservado." : "Gravação parada."}</p><p>{pendingCount > 0 ? `${pendingCount} trecho${pendingCount === 1 ? "" : "s"} salvo${pendingCount === 1 ? "" : "s"} localmente aguardando sincronização.` : "Tudo sincronizado com o prontuário."}</p></div>{pendingCount > 0 && online ? <Button type="button" variant="outline" size="sm" className="mt-3 w-full" disabled={processingCount > 0} onClick={() => void syncPending()}><RefreshCw /> Tentar sincronizar agora</Button> : null}</div><InfoCard icon={<Sparkles />} title="Revisão assistida" text="Use a transcrição para extrair a anamnese e revisar os dados antes de avançar." /><InfoCard icon={<FileText />} title="Proteção contra perda" text="O encerramento só conclui depois que a última janela de áudio foi preservada e a fila de captura terminou." /></aside></section> : null}
 
       {step === 1 ? <div className="space-y-4"><ActionBar busy={busy === "anamnese"} disabled={!transcriptText || busy !== null} label="Extrair anamnese da conversa" icon={<Sparkles />} onAction={() => void run("anamnese", async () => { const result = await extractAnamnesis({ data: { transcript: transcriptText } }); const next: AnamnesisFields = { ...anamnesis }; for (const [key, value] of Object.entries(result.fields)) if (value) next[key as keyof AnamnesisFields] = { value, status: "sugerido", source: "transcrição" }; setAnamnesis(next); await db.saveAnamnesis(id, next); })} secondary={<Button size="sm" variant="outline" onClick={() => void run("save-anamnese", async () => db.saveAnamnesis(id, anamnesis))}><Save /> Salvar revisão</Button>} /><AnamnesisPanel fields={anamnesis} onChange={setAnamnesis} /></div> : null}
 
@@ -230,7 +349,7 @@ function ConsultationPage() {
 
       {step === 6 ? <MenuStep conduct={conduct} setConduct={setConduct} busy={busy} foods={foods.data ?? []} plan={plan} targetKcal={energyResult.tee} onGenerate={() => void generatePlan()} onUpdatePlan={updatePlan} onSave={() => void savePlan()} onFinish={() => void finish()} /> : null}
 
-      <div className="mt-8 flex items-center justify-between border-t border-border pt-4"><Button variant="ghost" size="sm" onClick={goPrevious} disabled={step === 0}><ArrowLeft /> Anterior</Button>{step < STEPS.length - 1 ? <Button size="sm" onClick={goNext}>Próxima etapa <ArrowRight /></Button> : <Link to="/prontuario/$id" params={{ id }}><Button size="sm" variant="secondary"><FileText /> Abrir parecer</Button></Link>}</div>
+      <div className="mt-8 flex items-center justify-between border-t border-border pt-4"><Button variant="ghost" size="sm" onClick={goPrevious} disabled={step === 0}><ArrowLeft /> Anterior</Button>{step < STEPS.length - 1 ? <Button size="sm" onClick={goNext} disabled={finalizingAudio}>Próxima etapa <ArrowRight /></Button> : <Link to="/prontuario/$id" params={{ id }}><Button size="sm" variant="secondary"><FileText /> Abrir parecer</Button></Link>}</div>
     </main>
   </AppShell>;
 }
