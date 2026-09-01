@@ -72,10 +72,23 @@ function Consent() {
     event.preventDefault();
     setBusy(true);
     setError(null);
+    setNotice(null);
+    if (mode === "signup") {
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: window.location.href },
+      });
+      setBusy(false);
+      if (signUpError) return setError(signUpError.message);
+      if (!data.session) setNotice("Confirme o e-mail enviado e volte a esta página para autorizar.");
+      return;
+    }
     const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
     if (signInError) setError(signInError.message);
   }
+
 
   async function decide(approve: boolean) {
     setBusy(true);
