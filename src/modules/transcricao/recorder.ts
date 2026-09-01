@@ -78,6 +78,9 @@ export interface AudioRecorder {
  * Reaproveita o mesmo pipeline PCM da consulta, garantindo um arquivo completo.
  */
 export async function startSingleRecording(): Promise<{ stop: () => Promise<Blob> }> {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error("Microfone indisponível neste navegador.");
+  }
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   const context = new AudioContext();
   const source = context.createMediaStreamSource(stream);
@@ -104,42 +107,70 @@ export async function startSingleRecording(): Promise<{ stop: () => Promise<Blob
 
 /**
  * Inicia a gravação. `onWindow` recebe um WAV completo a cada `windowMs`.
- * A gravação nunca é interrompida automaticamente — só pelo `stop()`.
+ * As janelas são entregues sequencialmente, na ordem em que foram capturadas.
+ * `stop()` aguarda o flush final e todos os callbacks pendentes antes de resolver.
  */
 export async function startRecording(
-  onWindow: (wav: Blob) => void,
+  onWindow: (wav: Blob) => Promise<void> | void,
   windowMs = 12000,
 ): Promise<AudioRecorder> {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    throw new Error("Microfone indisponível neste navegador.");
+  }
+
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   const context = new AudioContext();
   const source = context.createMediaStreamSource(stream);
   const processor = context.createScriptProcessor(4096, 1, 1);
   let buffer: Float32Array[] = [];
+  let deliveryChain = Promise.resolve();
+  let deliveryError: unknown = null;
+  let stopping = false;
 
   processor.onaudioprocess = (event) => {
+    if (stopping) return;
     buffer.push(new Float32Array(event.inputBuffer.getChannelData(0)));
   };
   source.connect(processor);
   processor.connect(context.destination);
 
-  const flush = () => {
-    if (buffer.length === 0) return;
+  const enqueueFlush = () => {
+    if (buffer.length === 0) return deliveryChain;
     const current = buffer;
     buffer = [];
     const wav = encodeWav(current, context.sampleRate);
-    if (wav.size > 4000) onWindow(wav);
+    if (wav.size <= 4000) return deliveryChain;
+
+    deliveryChain = deliveryChain.then(async () => {
+      try {
+        await onWindow(wav);
+      } catch (error) {
+        deliveryError ??= error;
+      }
+    });
+    return deliveryChain;
   };
 
-  const interval = window.setInterval(flush, windowMs);
+  const interval = window.setInterval(() => {
+    void enqueueFlush();
+  }, windowMs);
 
   return {
     stop: async () => {
+      if (stopping) {
+        await deliveryChain;
+        return;
+      }
+      stopping = true;
       window.clearInterval(interval);
-      flush();
+      processor.onaudioprocess = null;
+      await enqueueFlush();
+      await deliveryChain;
       processor.disconnect();
       source.disconnect();
       stream.getTracks().forEach((track) => track.stop());
       await context.close();
+      if (deliveryError) throw deliveryError;
     },
   };
 }
