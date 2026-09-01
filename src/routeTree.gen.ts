@@ -18,6 +18,7 @@ import { Route as ConsultaIdRouteImport } from './routes/consulta.$id'
 import { Route as PacienteIdRouteImport } from './routes/paciente.$id'
 import { Route as ParecerIdRouteImport } from './routes/parecer.$id'
 import { Route as ProntuarioIdRouteImport } from './routes/prontuario.$id'
+import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -65,6 +66,11 @@ const ProntuarioIdRoute = ProntuarioIdRouteImport.update({
   path: '/prontuario/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
+  id: '/.lovable/oauth/consent',
+  path: '/.lovable/oauth/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -76,6 +82,7 @@ export interface FileRoutesByFullPath {
   '/paciente/$id': typeof PacienteIdRoute
   '/parecer/$id': typeof ParecerIdRoute
   '/prontuario/$id': typeof ProntuarioIdRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -87,6 +94,7 @@ export interface FileRoutesByTo {
   '/paciente/$id': typeof PacienteIdRoute
   '/parecer/$id': typeof ParecerIdRoute
   '/prontuario/$id': typeof ProntuarioIdRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -99,6 +107,7 @@ export interface FileRoutesById {
   '/paciente/$id': typeof PacienteIdRoute
   '/parecer/$id': typeof ParecerIdRoute
   '/prontuario/$id': typeof ProntuarioIdRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -112,6 +121,7 @@ export interface FileRouteTypes {
     | '/paciente/$id'
     | '/parecer/$id'
     | '/prontuario/$id'
+    | '/.lovable/oauth/consent'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -123,6 +133,7 @@ export interface FileRouteTypes {
     | '/paciente/$id'
     | '/parecer/$id'
     | '/prontuario/$id'
+    | '/.lovable/oauth/consent'
   id:
     | '__root__'
     | '/'
@@ -134,6 +145,7 @@ export interface FileRouteTypes {
     | '/paciente/$id'
     | '/parecer/$id'
     | '/prontuario/$id'
+    | '/.lovable/oauth/consent'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -146,6 +158,7 @@ export interface RootRouteChildren {
   PacienteIdRoute: typeof PacienteIdRoute
   ParecerIdRoute: typeof ParecerIdRoute
   ProntuarioIdRoute: typeof ProntuarioIdRoute
+  DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -213,6 +226,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProntuarioIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/.lovable/oauth/consent': {
+      id: '/.lovable/oauth/consent'
+      path: '/.lovable/oauth/consent'
+      fullPath: '/.lovable/oauth/consent'
+      preLoaderRoute: typeof DotlovableOauthConsentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -227,6 +247,7 @@ const rootRouteChildren: RootRouteChildren = {
   PacienteIdRoute: PacienteIdRoute,
   ParecerIdRoute: ParecerIdRoute,
   ProntuarioIdRoute: ProntuarioIdRoute,
+  DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
