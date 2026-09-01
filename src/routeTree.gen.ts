@@ -11,11 +11,14 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AlimentosRouteImport } from './routes/alimentos'
+import { Route as McpRouteImport } from './routes/mcp'
 import { Route as ReceitasRouteImport } from './routes/receitas'
+import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
 import { Route as ConsultaIdRouteImport } from './routes/consulta.$id'
 import { Route as PacienteIdRouteImport } from './routes/paciente.$id'
 import { Route as ParecerIdRouteImport } from './routes/parecer.$id'
 import { Route as ProntuarioIdRouteImport } from './routes/prontuario.$id'
+import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -27,11 +30,22 @@ const AlimentosRoute = AlimentosRouteImport.update({
   path: '/alimentos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReceitasRoute = ReceitasRouteImport.update({
   id: '/receitas',
   path: '/receitas',
   getParentRoute: () => rootRouteImport,
 } as any)
+const Char91DotwellKnownChar93OauthProtectedResourceRoute =
+  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
+    id: '/.well-known/oauth-protected-resource',
+    path: '/.well-known/oauth-protected-resource',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ConsultaIdRoute = ConsultaIdRouteImport.update({
   id: '/consulta/$id',
   path: '/consulta/$id',
@@ -52,73 +66,99 @@ const ProntuarioIdRoute = ProntuarioIdRouteImport.update({
   path: '/prontuario/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
+  id: '/.lovable/oauth/consent',
+  path: '/.lovable/oauth/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/alimentos': typeof AlimentosRoute
+  '/mcp': typeof McpRoute
   '/receitas': typeof ReceitasRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/consulta/$id': typeof ConsultaIdRoute
   '/paciente/$id': typeof PacienteIdRoute
   '/parecer/$id': typeof ParecerIdRoute
   '/prontuario/$id': typeof ProntuarioIdRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/alimentos': typeof AlimentosRoute
+  '/mcp': typeof McpRoute
   '/receitas': typeof ReceitasRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/consulta/$id': typeof ConsultaIdRoute
   '/paciente/$id': typeof PacienteIdRoute
   '/parecer/$id': typeof ParecerIdRoute
   '/prontuario/$id': typeof ProntuarioIdRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/alimentos': typeof AlimentosRoute
+  '/mcp': typeof McpRoute
   '/receitas': typeof ReceitasRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/consulta/$id': typeof ConsultaIdRoute
   '/paciente/$id': typeof PacienteIdRoute
   '/parecer/$id': typeof ParecerIdRoute
   '/prontuario/$id': typeof ProntuarioIdRoute
+  '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/alimentos'
+    | '/mcp'
     | '/receitas'
+    | '/.well-known/oauth-protected-resource'
     | '/consulta/$id'
     | '/paciente/$id'
     | '/parecer/$id'
     | '/prontuario/$id'
+    | '/.lovable/oauth/consent'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/alimentos'
+    | '/mcp'
     | '/receitas'
+    | '/.well-known/oauth-protected-resource'
     | '/consulta/$id'
     | '/paciente/$id'
     | '/parecer/$id'
     | '/prontuario/$id'
+    | '/.lovable/oauth/consent'
   id:
     | '__root__'
     | '/'
     | '/alimentos'
+    | '/mcp'
     | '/receitas'
+    | '/.well-known/oauth-protected-resource'
     | '/consulta/$id'
     | '/paciente/$id'
     | '/parecer/$id'
     | '/prontuario/$id'
+    | '/.lovable/oauth/consent'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AlimentosRoute: typeof AlimentosRoute
+  McpRoute: typeof McpRoute
   ReceitasRoute: typeof ReceitasRoute
+  Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   ConsultaIdRoute: typeof ConsultaIdRoute
   PacienteIdRoute: typeof PacienteIdRoute
   ParecerIdRoute: typeof ParecerIdRoute
   ProntuarioIdRoute: typeof ProntuarioIdRoute
+  DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -137,11 +177,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AlimentosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/receitas': {
       id: '/receitas'
       path: '/receitas'
       fullPath: '/receitas'
       preLoaderRoute: typeof ReceitasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/oauth-protected-resource': {
+      id: '/.well-known/oauth-protected-resource'
+      path: '/.well-known/oauth-protected-resource'
+      fullPath: '/.well-known/oauth-protected-resource'
+      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/consulta/$id': {
@@ -172,17 +226,28 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProntuarioIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/.lovable/oauth/consent': {
+      id: '/.lovable/oauth/consent'
+      path: '/.lovable/oauth/consent'
+      fullPath: '/.lovable/oauth/consent'
+      preLoaderRoute: typeof DotlovableOauthConsentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AlimentosRoute: AlimentosRoute,
+  McpRoute: McpRoute,
   ReceitasRoute: ReceitasRoute,
+  Char91DotwellKnownChar93OauthProtectedResourceRoute:
+    Char91DotwellKnownChar93OauthProtectedResourceRoute,
   ConsultaIdRoute: ConsultaIdRoute,
   PacienteIdRoute: PacienteIdRoute,
   ParecerIdRoute: ParecerIdRoute,
   ProntuarioIdRoute: ProntuarioIdRoute,
+  DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
