@@ -72,7 +72,9 @@ export async function createPatient(input: PatientInput) {
 }
 
 export async function updatePatient(id: string, input: PatientInput) {
-  return unwrap(await supabase.from("patients").update(input).eq("id", id).select().single()) as Patient;
+  return unwrap(
+    await supabase.from("patients").update(input).eq("id", id).select().single(),
+  ) as Patient;
 }
 
 /** Remove o paciente. Falha se já existirem consultas vinculadas (integridade clínica). */
@@ -122,7 +124,10 @@ export async function listPatientConsultations(patientId: string) {
 /** Datas de todas as consultas — base dos indicadores de volume (dia/semana/mês/ano). */
 export async function listConsultationDates() {
   return unwrap(
-    await supabase.from("consultations").select("consultation_date").order("consultation_date", { ascending: false }),
+    await supabase
+      .from("consultations")
+      .select("consultation_date")
+      .order("consultation_date", { ascending: false }),
   ) as { consultation_date: string }[];
 }
 
@@ -154,7 +159,10 @@ export async function getPatientDossier(patientId: string) {
   for (const row of (anthroRows.data ?? []) as { consultation_id: string; data: unknown }[]) {
     empty.anthro[row.consultation_id] = (row.data ?? {}) as Record<string, string | undefined>;
   }
-  for (const row of (recordRows.data ?? []) as { consultation_id: string; report: string | null }[]) {
+  for (const row of (recordRows.data ?? []) as {
+    consultation_id: string;
+    report: string | null;
+  }[]) {
     if (row.report) empty.reports[row.consultation_id] = row.report;
   }
   for (const row of (planRows.data ?? []) as { consultation_id: string; totals: unknown }[]) {
@@ -183,12 +191,10 @@ export async function insertSegments(
   consultationId: string,
   segments: { speaker: string; content: string; offset_seconds: number; client_id: string }[],
 ) {
-  const { error } = await supabase
-    .from("transcript_segments")
-    .upsert(
-      segments.map((s) => ({ ...s, consultation_id: consultationId })),
-      { onConflict: "consultation_id,client_id", ignoreDuplicates: true },
-    );
+  const { error } = await supabase.from("transcript_segments").upsert(
+    segments.map((s) => ({ ...s, consultation_id: consultationId })),
+    { onConflict: "consultation_id,client_id", ignoreDuplicates: true },
+  );
   if (error) throw new Error(error.message);
 }
 
@@ -205,7 +211,10 @@ export async function getAnamnesis(consultationId: string) {
 export async function saveAnamnesis(consultationId: string, fields: AnamnesisFields) {
   const { error } = await supabase
     .from("anamnesis")
-    .upsert({ consultation_id: consultationId, fields: json(fields) }, { onConflict: "consultation_id" });
+    .upsert(
+      { consultation_id: consultationId, fields: json(fields) },
+      { onConflict: "consultation_id" },
+    );
   if (error) throw new Error(error.message);
 }
 
@@ -232,7 +241,10 @@ export async function saveAnthropometry(
 ) {
   const { error } = await supabase
     .from("anthropometry")
-    .upsert({ consultation_id: consultationId, data: json(data), interpretation }, { onConflict: "consultation_id" });
+    .upsert(
+      { consultation_id: consultationId, data: json(data), interpretation },
+      { onConflict: "consultation_id" },
+    );
   if (error) throw new Error(error.message);
 }
 
@@ -246,7 +258,10 @@ export async function listRecall(consultationId: string) {
   ) as RecallItem[];
 }
 
-export async function upsertRecallItem(consultationId: string, item: Partial<RecallItem> & { id?: string }) {
+export async function upsertRecallItem(
+  consultationId: string,
+  item: Partial<RecallItem> & { id?: string },
+) {
   const payload = { ...item, consultation_id: consultationId };
   const { error } = await supabase.from("food_recall_items").upsert(json(payload));
   if (error) throw new Error(error.message);
@@ -270,10 +285,19 @@ export async function getDiagnoses(consultationId: string) {
   };
 }
 
-export async function saveDiagnoses(consultationId: string, hypotheses: string[], recall_flags: string[]) {
-  const { error } = await supabase
-    .from("diagnoses")
-    .upsert({ consultation_id: consultationId, hypotheses: json(hypotheses), recall_flags: json(recall_flags) }, { onConflict: "consultation_id" });
+export async function saveDiagnoses(
+  consultationId: string,
+  hypotheses: string[],
+  recall_flags: string[],
+) {
+  const { error } = await supabase.from("diagnoses").upsert(
+    {
+      consultation_id: consultationId,
+      hypotheses: json(hypotheses),
+      recall_flags: json(recall_flags),
+    },
+    { onConflict: "consultation_id" },
+  );
   if (error) throw new Error(error.message);
 }
 
@@ -294,7 +318,9 @@ export interface ConductRow {
 export async function getConduct(consultationId: string) {
   const { data, error } = await supabase
     .from("conducts")
-    .select("phase, kcal, protein_g, carb_g, fat_g, meals_count, goal, preferences, restrictions, notes, energy")
+    .select(
+      "phase, kcal, protein_g, carb_g, fat_g, meals_count, goal, preferences, restrictions, notes, energy",
+    )
     .eq("consultation_id", consultationId)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -304,7 +330,9 @@ export async function getConduct(consultationId: string) {
 export async function saveConduct(consultationId: string, conduct: ConductRow) {
   const { error } = await supabase
     .from("conducts")
-    .upsert(json({ consultation_id: consultationId, ...conduct }), { onConflict: "consultation_id" });
+    .upsert(json({ consultation_id: consultationId, ...conduct }), {
+      onConflict: "consultation_id",
+    });
   if (error) throw new Error(error.message);
 }
 
@@ -313,7 +341,17 @@ export async function listFoods() {
 }
 
 export async function createFood(food: Partial<Food>) {
-  const { error } = await supabase.from("foods").insert(json(food));
+  return unwrap(await supabase.from("foods").insert(json(food)).select().single()) as Food;
+}
+
+export async function updateFood(id: string, food: Partial<Food>) {
+  return unwrap(
+    await supabase.from("foods").update(json(food)).eq("id", id).select().single(),
+  ) as Food;
+}
+
+export async function deleteFood(id: string) {
+  const { error } = await supabase.from("foods").delete().eq("id", id);
   if (error) throw new Error(error.message);
 }
 
@@ -372,7 +410,10 @@ export async function getRecord(consultationId: string) {
 export async function saveRecord(consultationId: string, sections: Record<string, string>) {
   const { error } = await supabase
     .from("records")
-    .upsert({ consultation_id: consultationId, sections: json(sections) }, { onConflict: "consultation_id" });
+    .upsert(
+      { consultation_id: consultationId, sections: json(sections) },
+      { onConflict: "consultation_id" },
+    );
   if (error) throw new Error(error.message);
 }
 
