@@ -106,13 +106,14 @@ export async function startSingleRecording(): Promise<{ stop: () => Promise<Blob
 }
 
 /**
- * Inicia a gravação. `onWindow` recebe um WAV completo a cada `windowMs`.
+ * Inicia a gravação. `onWindow` recebe um WAV completo e o offset real da captura.
  * As janelas são entregues sequencialmente, na ordem em que foram capturadas.
  * `stop()` aguarda o flush final e todos os callbacks pendentes antes de resolver.
  */
 export async function startRecording(
-  onWindow: (wav: Blob) => Promise<void> | void,
+  onWindow: (wav: Blob, offsetSeconds: number) => Promise<void> | void,
   windowMs = 12000,
+  startOffsetSeconds = 0,
 ): Promise<AudioRecorder> {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new Error("Microfone indisponível neste navegador.");
@@ -126,6 +127,7 @@ export async function startRecording(
   let deliveryChain = Promise.resolve();
   let deliveryError: unknown = null;
   let stopping = false;
+  let nextOffsetSeconds = startOffsetSeconds;
 
   processor.onaudioprocess = (event) => {
     if (stopping) return;
@@ -141,9 +143,13 @@ export async function startRecording(
     const wav = encodeWav(current, context.sampleRate);
     if (wav.size <= 4000) return deliveryChain;
 
+    const offsetSeconds = nextOffsetSeconds;
+    const durationSeconds = Math.max(0, (wav.size - 44) / 2 / TARGET_SAMPLE_RATE);
+    nextOffsetSeconds += durationSeconds;
+
     deliveryChain = deliveryChain.then(async () => {
       try {
-        await onWindow(wav);
+        await onWindow(wav, offsetSeconds);
       } catch (error) {
         deliveryError ??= error;
       }
