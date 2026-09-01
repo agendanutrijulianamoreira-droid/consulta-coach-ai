@@ -1,0 +1,207 @@
+{
+  "version": 1,
+  "sdk_version": "1.0.0",
+  "path": "/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://qmorkfyatadqrdvtuvhs.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "nutri-flow-ai",
+      "version": "0.1.0",
+      "title": "Nutri Flow AI"
+    },
+    "tools": [
+      {
+        "name": "list_patients",
+        "title": "Listar pacientes",
+        "description": "Lista pacientes cadastrados no NutriOS, com busca opcional por nome, CPF ou tag.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "search": {
+              "description": "Texto para filtrar por nome ou CPF.",
+              "type": "string"
+            },
+            "tag": {
+              "description": "Tag exata para filtrar.",
+              "type": "string"
+            },
+            "limit": {
+              "default": 20,
+              "description": "Máximo de pacientes retornados.",
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_patient_dossier",
+        "title": "Abrir ficha do paciente",
+        "description": "Retorna a ficha completa de um paciente: cadastro, consultas, antropometria, pareceres e planos alimentares.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "patient_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "ID do paciente no NutriOS."
+            }
+          },
+          "required": [
+            "patient_id"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "create_patient",
+        "title": "Cadastrar paciente",
+        "description": "Cria um novo paciente no NutriOS com os dados básicos de cadastro.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 2,
+              "description": "Nome completo do paciente."
+            },
+            "birth_date": {
+              "description": "Data de nascimento no formato AAAA-MM-DD.",
+              "type": "string"
+            },
+            "sex": {
+              "description": "Sexo biológico.",
+              "type": "string",
+              "enum": [
+                "feminino",
+                "masculino"
+              ]
+            },
+            "cpf": {
+              "type": "string"
+            },
+            "phone": {
+              "type": "string"
+            },
+            "email": {
+              "type": "string",
+              "format": "email",
+              "pattern": "^(?!\\.)(?!.*\\.\\.)([A-Za-z0-9_'+\\-\\.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+            },
+            "tags": {
+              "description": "Tags para filtro (ex.: gestante, emagrecimento).",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "notes": {
+              "description": "Observações clínicas iniciais.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "schedule_consultation",
+        "title": "Registrar consulta",
+        "description": "Registra uma nova consulta para um paciente em uma data específica.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "patient_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$",
+              "description": "ID do paciente."
+            },
+            "consultation_date": {
+              "type": "string",
+              "description": "Data da consulta no formato AAAA-MM-DD."
+            }
+          },
+          "required": [
+            "patient_id",
+            "consultation_date"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "search_foods",
+        "title": "Buscar alimentos",
+        "description": "Consulta a base de alimentos do NutriOS com nome, porção e macronutrientes.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "search": {
+              "description": "Nome ou parte do nome do alimento.",
+              "type": "string"
+            },
+            "meal_slot": {
+              "description": "Refeição em que o alimento pode ser usado.",
+              "type": "string",
+              "enum": [
+                "cafe",
+                "lanche",
+                "almoco",
+                "jantar",
+                "ceia"
+              ]
+            },
+            "limit": {
+              "default": 25,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
