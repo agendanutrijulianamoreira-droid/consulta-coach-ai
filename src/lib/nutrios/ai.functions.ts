@@ -6,12 +6,28 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const ANAMNESIS_KEYS = [
-  "queixa_principal", "historia_doenca", "sintomas",
-  "medicamentos", "suplementos", "exames", "doencas", "alergias", "intolerancias",
-  "rotina", "sono", "estresse", "exercicio", "agua", "evacuacao", "objetivos",
-  "motivacao", "preferencias", "restricoes_alimentares",
+  "queixa_principal",
+  "historia_doenca",
+  "sintomas",
+  "medicamentos",
+  "suplementos",
+  "exames",
+  "doencas",
+  "alergias",
+  "intolerancias",
+  "rotina",
+  "sono",
+  "estresse",
+  "exercicio",
+  "agua",
+  "evacuacao",
+  "objetivos",
+  "motivacao",
+  "preferencias",
+  "restricoes_alimentares",
 ] as const;
 
 async function transcribeWav(audioBase64: string) {
@@ -37,15 +53,19 @@ async function transcribeWav(audioBase64: string) {
 
 /** Ditado simples: devolve o texto falado, sem separar interlocutores. */
 export const dictate = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => z.object({ audioBase64: z.string().min(1) }).parse(input))
   .handler(async ({ data }) => ({ text: await transcribeWav(data.audioBase64) }));
 
 /** Converte a fala do recordatório em linhas estruturadas por refeição. */
 export const structureRecall = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => z.object({ transcript: z.string().min(1) }).parse(input))
   .handler(async ({ data }) => {
     const { callAiJson } = await import("@/lib/ai-gateway.server");
-    const parsed = await callAiJson<{ items: { time_label: string; foods: string; amount: string; preparation: string }[] }>({
+    const parsed = await callAiJson<{
+      items: { time_label: string; foods: string; amount: string; preparation: string }[];
+    }>({
       instructions:
         "Você organiza recordatórios alimentares de 24 horas em português do Brasil. A partir do relato, " +
         "monte uma linha por refeição com horário, alimentos, quantidade relatada e modo de preparo. " +
@@ -81,8 +101,18 @@ export const structureRecall = createServerFn({ method: "POST" })
 
 /** Parecer nutricional completo para entregar ao paciente. */
 export const generateReport = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
-    z.object({ patient: z.string(), anamnesis: z.string(), anthropometry: z.string(), energy: z.string(), diagnosis: z.string(), plan: z.string() }).parse(input),
+    z
+      .object({
+        patient: z.string(),
+        anamnesis: z.string(),
+        anthropometry: z.string(),
+        energy: z.string(),
+        diagnosis: z.string(),
+        plan: z.string(),
+      })
+      .parse(input),
   )
   .handler(async ({ data }) => {
     const { callAi } = await import("@/lib/ai-gateway.server");
@@ -117,6 +147,7 @@ function anamnesisSchema() {
 
 /** Transcreve um trecho de áudio e separa as falas entre nutricionista e paciente. */
 export const transcribeChunk = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
     z.object({ audioBase64: z.string().min(1), context: z.string().default("") }).parse(input),
   )
@@ -185,6 +216,7 @@ export const transcribeChunk = createServerFn({ method: "POST" })
 
 /** Extrai os campos da anamnese a partir da transcrição acumulada. */
 export const extractAnamnesis = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => z.object({ transcript: z.string().min(1) }).parse(input))
   .handler(async ({ data }) => {
     const { callAiJson } = await import("@/lib/ai-gateway.server");
@@ -201,7 +233,10 @@ export const extractAnamnesis = createServerFn({ method: "POST" })
 
 /** Resumo clínico estruturado ao concluir a anamnese. */
 export const generateClinicalSummary = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) => z.object({ transcript: z.string(), anamnesis: z.string() }).parse(input))
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ transcript: z.string(), anamnesis: z.string() }).parse(input),
+  )
   .handler(async ({ data }) => {
     const { callAi } = await import("@/lib/ai-gateway.server");
     const text = await callAi({
@@ -216,6 +251,7 @@ export const generateClinicalSummary = createServerFn({ method: "POST" })
 
 /** Leitura automática da antropometria (evolução e risco). */
 export const interpretAnthropometry = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => z.object({ data: z.string() }).parse(input))
   .handler(async ({ data }) => {
     const { callAi } = await import("@/lib/ai-gateway.server");
@@ -230,6 +266,7 @@ export const interpretAnthropometry = createServerFn({ method: "POST" })
 
 /** Sinalizações do recordatório e hipóteses nutricionais (sempre como sugestão). */
 export const analyzeConsultation = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
     z.object({ anamnesis: z.string(), anthropometry: z.string(), recall: z.string() }).parse(input),
   )
@@ -264,7 +301,10 @@ export const analyzeConsultation = createServerFn({ method: "POST" })
  * a IA apenas explica as escolhas e escreve as orientações, sem alterar itens.
  */
 export const describeMealPlan = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) => z.object({ plan: z.string(), context: z.string() }).parse(input))
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ plan: z.string(), context: z.string() }).parse(input),
+  )
   .handler(async ({ data }) => {
     const { callAi } = await import("@/lib/ai-gateway.server");
     const text = await callAi({
