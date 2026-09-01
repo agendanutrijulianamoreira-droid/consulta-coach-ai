@@ -7,6 +7,7 @@
  */
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const INSTRUCTIONS = [
   "Você redige os textos do parecer nutricional da Dra. Juliana Moreira (CRN-9 22234), especialista em Nutrição Funcional e Saúde da Mulher.",
@@ -69,6 +70,7 @@ export interface ParecerTextsPayload {
 
 /** Gera os textos do parecer a partir dos indicadores já calculados. */
 export const generateParecerTexts = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
     z.object({ metrics: z.string().min(1), clinical: z.string().default("") }).parse(input),
   )

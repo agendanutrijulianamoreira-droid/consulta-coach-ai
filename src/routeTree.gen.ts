@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AlimentosRouteImport } from './routes/alimentos'
+import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as ReceitasRouteImport } from './routes/receitas'
 import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
@@ -28,6 +29,11 @@ const IndexRoute = IndexRouteImport.update({
 const AlimentosRoute = AlimentosRouteImport.update({
   id: '/alimentos',
   path: '/alimentos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EntrarRoute = EntrarRouteImport.update({
+  id: '/entrar',
+  path: '/entrar',
   getParentRoute: () => rootRouteImport,
 } as any)
 const McpRoute = McpRouteImport.update({
@@ -75,6 +81,7 @@ const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/alimentos': typeof AlimentosRoute
+  '/entrar': typeof EntrarRoute
   '/mcp': typeof McpRoute
   '/receitas': typeof ReceitasRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
@@ -87,6 +94,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/alimentos': typeof AlimentosRoute
+  '/entrar': typeof EntrarRoute
   '/mcp': typeof McpRoute
   '/receitas': typeof ReceitasRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
@@ -100,6 +108,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/alimentos': typeof AlimentosRoute
+  '/entrar': typeof EntrarRoute
   '/mcp': typeof McpRoute
   '/receitas': typeof ReceitasRoute
   '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
@@ -114,6 +123,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/alimentos'
+    | '/entrar'
     | '/mcp'
     | '/receitas'
     | '/.well-known/oauth-protected-resource'
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/alimentos'
+    | '/entrar'
     | '/mcp'
     | '/receitas'
     | '/.well-known/oauth-protected-resource'
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/alimentos'
+    | '/entrar'
     | '/mcp'
     | '/receitas'
     | '/.well-known/oauth-protected-resource'
@@ -151,6 +163,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AlimentosRoute: typeof AlimentosRoute
+  EntrarRoute: typeof EntrarRoute
   McpRoute: typeof McpRoute
   ReceitasRoute: typeof ReceitasRoute
   Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
@@ -175,6 +188,13 @@ declare module '@tanstack/react-router' {
       path: '/alimentos'
       fullPath: '/alimentos'
       preLoaderRoute: typeof AlimentosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/entrar': {
+      id: '/entrar'
+      path: '/entrar'
+      fullPath: '/entrar'
+      preLoaderRoute: typeof EntrarRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mcp': {
@@ -239,6 +259,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AlimentosRoute: AlimentosRoute,
+  EntrarRoute: EntrarRoute,
   McpRoute: McpRoute,
   ReceitasRoute: ReceitasRoute,
   Char91DotwellKnownChar93OauthProtectedResourceRoute:
