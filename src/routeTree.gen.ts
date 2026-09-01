@@ -11,7 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AlimentosRouteImport } from './routes/alimentos'
+import { Route as McpRouteImport } from './routes/mcp'
 import { Route as ReceitasRouteImport } from './routes/receitas'
+import { Route as Char91DotwellKnownChar93OauthProtectedResourceRouteImport } from './routes/[.well-known]/oauth-protected-resource'
 import { Route as ConsultaIdRouteImport } from './routes/consulta.$id'
 import { Route as PacienteIdRouteImport } from './routes/paciente.$id'
 import { Route as ParecerIdRouteImport } from './routes/parecer.$id'
@@ -27,11 +29,22 @@ const AlimentosRoute = AlimentosRouteImport.update({
   path: '/alimentos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReceitasRoute = ReceitasRouteImport.update({
   id: '/receitas',
   path: '/receitas',
   getParentRoute: () => rootRouteImport,
 } as any)
+const Char91DotwellKnownChar93OauthProtectedResourceRoute =
+  Char91DotwellKnownChar93OauthProtectedResourceRouteImport.update({
+    id: '/.well-known/oauth-protected-resource',
+    path: '/.well-known/oauth-protected-resource',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ConsultaIdRoute = ConsultaIdRouteImport.update({
   id: '/consulta/$id',
   path: '/consulta/$id',
@@ -56,7 +69,9 @@ const ProntuarioIdRoute = ProntuarioIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/alimentos': typeof AlimentosRoute
+  '/mcp': typeof McpRoute
   '/receitas': typeof ReceitasRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/consulta/$id': typeof ConsultaIdRoute
   '/paciente/$id': typeof PacienteIdRoute
   '/parecer/$id': typeof ParecerIdRoute
@@ -65,7 +80,9 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/alimentos': typeof AlimentosRoute
+  '/mcp': typeof McpRoute
   '/receitas': typeof ReceitasRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/consulta/$id': typeof ConsultaIdRoute
   '/paciente/$id': typeof PacienteIdRoute
   '/parecer/$id': typeof ParecerIdRoute
@@ -75,7 +92,9 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/alimentos': typeof AlimentosRoute
+  '/mcp': typeof McpRoute
   '/receitas': typeof ReceitasRoute
+  '/.well-known/oauth-protected-resource': typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   '/consulta/$id': typeof ConsultaIdRoute
   '/paciente/$id': typeof PacienteIdRoute
   '/parecer/$id': typeof ParecerIdRoute
@@ -86,7 +105,9 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/alimentos'
+    | '/mcp'
     | '/receitas'
+    | '/.well-known/oauth-protected-resource'
     | '/consulta/$id'
     | '/paciente/$id'
     | '/parecer/$id'
@@ -95,7 +116,9 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/alimentos'
+    | '/mcp'
     | '/receitas'
+    | '/.well-known/oauth-protected-resource'
     | '/consulta/$id'
     | '/paciente/$id'
     | '/parecer/$id'
@@ -104,7 +127,9 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/alimentos'
+    | '/mcp'
     | '/receitas'
+    | '/.well-known/oauth-protected-resource'
     | '/consulta/$id'
     | '/paciente/$id'
     | '/parecer/$id'
@@ -114,7 +139,9 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AlimentosRoute: typeof AlimentosRoute
+  McpRoute: typeof McpRoute
   ReceitasRoute: typeof ReceitasRoute
+  Char91DotwellKnownChar93OauthProtectedResourceRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRoute
   ConsultaIdRoute: typeof ConsultaIdRoute
   PacienteIdRoute: typeof PacienteIdRoute
   ParecerIdRoute: typeof ParecerIdRoute
@@ -137,11 +164,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AlimentosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/receitas': {
       id: '/receitas'
       path: '/receitas'
       fullPath: '/receitas'
       preLoaderRoute: typeof ReceitasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/oauth-protected-resource': {
+      id: '/.well-known/oauth-protected-resource'
+      path: '/.well-known/oauth-protected-resource'
+      fullPath: '/.well-known/oauth-protected-resource'
+      preLoaderRoute: typeof Char91DotwellKnownChar93OauthProtectedResourceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/consulta/$id': {
@@ -178,7 +219,10 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AlimentosRoute: AlimentosRoute,
+  McpRoute: McpRoute,
   ReceitasRoute: ReceitasRoute,
+  Char91DotwellKnownChar93OauthProtectedResourceRoute:
+    Char91DotwellKnownChar93OauthProtectedResourceRoute,
   ConsultaIdRoute: ConsultaIdRoute,
   PacienteIdRoute: PacienteIdRoute,
   ParecerIdRoute: ParecerIdRoute,
