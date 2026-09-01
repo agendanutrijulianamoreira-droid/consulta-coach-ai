@@ -20,5 +20,7 @@ export default defineMcp({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated",
   }),
-  tools: [listPatients, getPatientDossier, createPatient, scheduleConsultation, searchFoods],
+  // Cast necessário: defineTool infere outputSchema como `undefined`, incompatível com
+  // exactOptionalPropertyTypes no tipo AnyToolDefinition esperado por defineMcp.
+  tools: [listPatients, getPatientDossier, createPatient, scheduleConsultation, searchFoods] as unknown as Parameters<typeof defineMcp>[0]["tools"],
 });
