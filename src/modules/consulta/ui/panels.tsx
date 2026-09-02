@@ -12,6 +12,7 @@ import * as db from "@/lib/nutrios/repository";
 import {
   ANAMNESIS_FIELDS,
   ANAMNESIS_SECTIONS,
+  type AnamnesisField,
   type AnamnesisFields,
   type AnamnesisKey,
   type RecallItem,
@@ -99,7 +100,7 @@ export function AnamnesisPanel({
     [onChange, persist],
   );
 
-  const update = (key: AnamnesisKey, value: Partial<AnamnesisFields[AnamnesisKey]>) => {
+  const update = (key: AnamnesisKey, value: Partial<AnamnesisField>) => {
     apply(updateAnamnesisField(fields, key, value));
   };
 
@@ -294,7 +295,7 @@ export function AnamnesisPanel({
                           />
                           {field?.value && status === "sugerido" ? (
                             <StatusButton
-                              active={status === "recusado"}
+                              active={false}
                               title="Descartar sugestão"
                               onClick={() => update(key, { status: "recusado" })}
                             >
