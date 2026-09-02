@@ -74,7 +74,10 @@ export function LabAssessmentPanel({ consultationId, patientId, context, onCount
 
   async function addManual() {
     const value = parseNumber(manual.value);
-    if (!manual.name.trim() || value === null) return toast.error("Informe o nome do exame e um resultado numérico.");
+    if (!manual.name.trim() || value === null) {
+      toast.error("Informe o nome do exame e um resultado numérico.");
+      return;
+    }
     setBusy("manual");
     try {
       await labs.upsertLabResult(consultationId, {
@@ -112,9 +115,15 @@ export function LabAssessmentPanel({ consultationId, patientId, context, onCount
   }
 
   async function handleFile(file: File) {
-    if (file.size > 12 * 1024 * 1024) return toast.error("O arquivo deve ter no máximo 12 MB.");
+    if (file.size > 12 * 1024 * 1024) {
+      toast.error("O arquivo deve ter no máximo 12 MB.");
+      return;
+    }
     const allowed = ["application/pdf", "image/jpeg", "image/png", "image/webp"] as const;
-    if (!allowed.includes(file.type as (typeof allowed)[number])) return toast.error("Use PDF, JPG, PNG ou WEBP.");
+    if (!allowed.includes(file.type as (typeof allowed)[number])) {
+      toast.error("Use PDF, JPG, PNG ou WEBP.");
+      return;
+    }
     setBusy("file");
     try {
       const mimeType = file.type as (typeof allowed)[number];
