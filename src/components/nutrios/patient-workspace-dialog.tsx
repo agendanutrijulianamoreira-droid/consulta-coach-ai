@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, Pencil, Plus, X } from "lucide-react";
+import { Activity, FileText, Pencil, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PatientDialog } from "@/components/nutrios/patient-dialog";
+import { ConsultationWorkspace } from "@/components/nutrios/consultation-workspace";
 import * as db from "@/lib/nutrios/repository";
 
 export type WorkspaceSection =
@@ -65,7 +66,6 @@ export function PatientWorkspaceDialog({
   const [consultationId, setConsultationId] = useState<string | null>(initialConsultationId ?? null);
   const [editing, setEditing] = useState(false);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const patient = useQuery({
     queryKey: ["patient", patientId],
@@ -111,31 +111,11 @@ export function PatientWorkspaceDialog({
   const selectSection = (next: WorkspaceSection) => {
     setSection(next);
     const first = rows[0];
-    if (next in CONSULTATION_STEP && !consultationId && first) setConsultationId(first.id);
+    if (CONSULTATION_STEP[next] !== undefined && !consultationId && first) setConsultationId(first.id);
   };
 
-  const syncEmbeddedStep = useCallback(() => {
-    const frame = iframeRef.current;
-    const step = CONSULTATION_STEP[section];
-    if (!frame || step === undefined) return;
-    try {
-      const doc = frame.contentDocument;
-      if (!doc) return;
-      injectEmbeddedStyles(doc);
-      const tabs = Array.from(doc.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
-      tabs[step]?.click();
-    } catch {
-      // Same-origin is expected in production. If unavailable, the consultation still remains usable.
-    }
-  }, [section]);
-
-  useEffect(() => {
-    if (CONSULTATION_STEP[section] === undefined) return;
-    const timer = window.setTimeout(syncEmbeddedStep, 40);
-    return () => window.clearTimeout(timer);
-  }, [section, syncEmbeddedStep]);
-
   const p = patient.data;
+  const activeConsultationStep = CONSULTATION_STEP[section];
 
   return (
     <Dialog open={open && !!patientId} onOpenChange={onOpenChange}>
@@ -160,7 +140,7 @@ export function PatientWorkspaceDialog({
         </header>
 
         <div className="grid min-h-0 grid-cols-[190px_minmax(0,1fr)] md:grid-cols-[210px_minmax(0,1fr)]">
-          <aside className="border-r border-border bg-muted/20 px-3 py-4">
+          <aside className="overflow-y-auto border-r border-border bg-muted/20 px-3 py-4">
             <nav className="grid gap-1" aria-label="Seções do prontuário">
               {SECTIONS.map((item) => (
                 <button
@@ -182,7 +162,13 @@ export function PatientWorkspaceDialog({
 
           <main className="min-h-0 overflow-y-auto bg-background">
             {section === "perfil" ? (
-              <Profile patient={p ?? null} rows={rows} onEdit={() => setEditing(true)} />
+              <Profile
+                patient={p ?? null}
+                rows={rows}
+                dossier={dossier.data}
+                onEdit={() => setEditing(true)}
+                onOpenSection={selectSection}
+              />
             ) : section === "historico" ? (
               <History
                 rows={rows}
@@ -197,17 +183,17 @@ export function PatientWorkspaceDialog({
                 consultationId={selectedConsultation?.id ?? null}
                 report={selectedConsultation ? dossier.data?.reports[selectedConsultation.id] : undefined}
               />
-            ) : selectedConsultation ? (
-              <div className="h-full min-h-[680px]">
-                <iframe
-                  key={selectedConsultation.id}
-                  ref={iframeRef}
-                  title={`Consulta de ${p?.name ?? "paciente"}`}
-                  src={`/consulta/${selectedConsultation.id}`}
-                  onLoad={syncEmbeddedStep}
-                  className="h-full min-h-[680px] w-full border-0 bg-background"
-                />
-              </div>
+            ) : selectedConsultation && activeConsultationStep !== undefined ? (
+              <ConsultationWorkspace
+                key={selectedConsultation.id}
+                consultationId={selectedConsultation.id}
+                activeStep={activeConsultationStep}
+                embedded
+                onOpenReport={() => {
+                  void queryClient.invalidateQueries({ queryKey: ["patient-dossier", patientId] });
+                  setSection("parecer");
+                }}
+              />
             ) : (
               <EmptyConsultation
                 date={date}
@@ -225,19 +211,51 @@ export function PatientWorkspaceDialog({
   );
 }
 
-function Profile({ patient, rows, onEdit }: { patient: db.Patient | null; rows: db.Consultation[]; onEdit: () => void }) {
+function Profile({
+  patient,
+  rows,
+  dossier,
+  onEdit,
+  onOpenSection,
+}: {
+  patient: db.Patient | null;
+  rows: db.Consultation[];
+  dossier: Awaited<ReturnType<typeof db.getPatientDossier>> | undefined;
+  onEdit: () => void;
+  onOpenSection: (section: WorkspaceSection) => void;
+}) {
   const last = rows[0];
+  const lastAnthro = last ? dossier?.anthro[last.id] : undefined;
+  const lastPlan = last ? dossier?.plans[last.id] : undefined;
+  const lastReport = last ? dossier?.reports[last.id] : undefined;
+
   return (
     <div className="mx-auto max-w-5xl px-6 py-7 lg:px-10 lg:py-9">
       <div className="flex items-start justify-between gap-4 border-b border-border pb-5">
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Perfil</p>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight">Dados do paciente</h2>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight">Visão geral do paciente</h2>
         </div>
         <Button variant="secondary" size="sm" disabled={!patient} onClick={onEdit}><Pencil /> Editar cadastro</Button>
       </div>
 
-      <div className="mt-7 grid gap-8 lg:grid-cols-[1fr_0.8fr]">
+      <section className="mt-6">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold">Fluxo da consulta</h3>
+            <p className="mt-1 text-xs text-muted-foreground">Acesse diretamente as áreas mais usadas do atendimento.</p>
+          </div>
+          <Activity className="size-4 text-muted-foreground" />
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <FlowButton label="Consulta" onClick={() => onOpenSection("consulta")} />
+          <FlowButton label="Anamnese" onClick={() => onOpenSection("anamnese")} />
+          <FlowButton label="Antropometria" onClick={() => onOpenSection("antropometria")} />
+          <FlowButton label="Plano alimentar" onClick={() => onOpenSection("plano")} />
+        </div>
+      </section>
+
+      <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_0.85fr]">
         <section>
           <h3 className="text-sm font-semibold">Dados cadastrais</h3>
           <dl className="mt-3 divide-y divide-border border-y border-border text-sm">
@@ -249,16 +267,31 @@ function Profile({ patient, rows, onEdit }: { patient: db.Patient | null; rows: 
             <Row label="Última consulta" value={last ? formatDate(last.consultation_date ?? last.created_at) : null} />
           </dl>
         </section>
+
         <section>
-          <h3 className="text-sm font-semibold">Observações</h3>
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{patient?.notes || "Sem observações registradas."}</p>
-          {patient?.tags?.length ? (
-            <div className="mt-5 flex flex-wrap gap-1.5">{patient.tags.map((tag) => <Badge key={tag} variant="outline">{tag}</Badge>)}</div>
-          ) : null}
+          <h3 className="text-sm font-semibold">Último acompanhamento</h3>
+          <dl className="mt-3 divide-y divide-border border-y border-border text-sm">
+            <Row label="Status" value={last ? (last.status === "finalizada" ? "Finalizada" : "Em aberto") : null} />
+            <Row label="Peso" value={lastAnthro?.["peso"] ? `${lastAnthro["peso"]} kg` : null} />
+            <Row label="Plano" value={lastPlan?.kcal ? `${Math.round(lastPlan.kcal)} kcal` : null} />
+            <Row label="Parecer" value={lastReport ? "Disponível" : null} />
+          </dl>
         </section>
       </div>
+
+      <section className="mt-8 border-t border-border pt-6">
+        <h3 className="text-sm font-semibold">Observações</h3>
+        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{patient?.notes || "Sem observações registradas."}</p>
+        {patient?.tags?.length ? (
+          <div className="mt-5 flex flex-wrap gap-1.5">{patient.tags.map((tag) => <Badge key={tag} variant="outline">{tag}</Badge>)}</div>
+        ) : null}
+      </section>
     </div>
   );
+}
+
+function FlowButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return <Button type="button" variant="outline" className="h-auto justify-start px-4 py-3 text-sm" onClick={onClick}>{label}</Button>;
 }
 
 function History({
@@ -344,18 +377,4 @@ function describe(patient: db.Patient) {
 function formatDate(value: string) {
   const date = value.length === 10 ? new Date(`${value}T12:00:00`) : new Date(value);
   return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(date);
-}
-
-function injectEmbeddedStyles(doc: Document) {
-  if (doc.getElementById("cach-workspace-embed-style")) return;
-  const style = doc.createElement("style");
-  style.id = "cach-workspace-embed-style";
-  style.textContent = `
-    .flex.min-h-screen.bg-background.text-foreground > aside { display: none !important; }
-    main.flex.min-w-0.flex-1.flex-col > .md\\:hidden { display: none !important; }
-    .min-w-0.flex-1 > .border-b.border-border.px-3.py-3 { display: none !important; }
-    .flex.min-h-screen.bg-background.text-foreground { min-height: 100% !important; }
-    body { overflow: auto !important; }
-  `;
-  doc.head.appendChild(style);
 }
