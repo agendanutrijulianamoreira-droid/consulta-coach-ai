@@ -48,11 +48,13 @@ export function AnamnesisPanel({
   const { id } = useParams({ from: "/consulta/$id" });
   const extract = useServerFn(extractClinicalAnamnesis);
   const segments = useQuery({ queryKey: ["segments", id], queryFn: () => db.listSegments(id) });
+  const storedAnamnesis = useQuery({ queryKey: ["anamnesis", id], queryFn: () => db.getAnamnesis(id) });
   const [editing, setEditing] = useState<AnamnesisKey | null>(null);
   const [openSections, setOpenSections] = useState<string[]>(["motivo", "clinico"]);
   const [extracting, setExtracting] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const saveTimer = useRef<number | null>(null);
+  const pendingFields = useRef<AnamnesisFields | null>(null);
   const autoExtracted = useRef(false);
 
   const transcript = useMemo(
@@ -69,13 +71,18 @@ export function AnamnesisPanel({
 
   const persist = useCallback(
     (next: AnamnesisFields) => {
+      pendingFields.current = next;
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
       setSaveState("pending");
       saveTimer.current = window.setTimeout(() => {
+        const snapshot = next;
         setSaveState("saving");
         void db
-          .saveAnamnesis(id, next)
-          .then(() => setSaveState("saved"))
+          .saveAnamnesis(id, snapshot)
+          .then(() => {
+            if (pendingFields.current === snapshot) pendingFields.current = null;
+            setSaveState("saved");
+          })
           .catch(() => {
             setSaveState("error");
             toast.error("Não foi possível salvar a anamnese. As alterações permanecem na tela para nova tentativa.");
@@ -88,8 +95,10 @@ export function AnamnesisPanel({
   useEffect(
     () => () => {
       if (saveTimer.current) window.clearTimeout(saveTimer.current);
+      const snapshot = pendingFields.current;
+      if (snapshot) void db.saveAnamnesis(id, snapshot);
     },
-    [],
+    [id],
   );
 
   const apply = useCallback(
@@ -123,10 +132,12 @@ export function AnamnesisPanel({
   );
 
   useEffect(() => {
+    if (!storedAnamnesis.isFetched) return;
+    if (Object.keys(storedAnamnesis.data ?? {}).length > 0) return;
     if (autoExtracted.current || !transcript.trim() || Object.keys(fields).length > 0) return;
     autoExtracted.current = true;
     void extractFromConversation(true);
-  }, [extractFromConversation, fields, transcript]);
+  }, [extractFromConversation, fields, storedAnamnesis.data, storedAnamnesis.isFetched, transcript]);
 
   const acceptAllSuggestions = () => {
     let changed = false;
@@ -143,10 +154,15 @@ export function AnamnesisPanel({
 
   const retrySave = () => {
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    const snapshot = fields;
+    pendingFields.current = snapshot;
     setSaveState("saving");
     void db
-      .saveAnamnesis(id, fields)
-      .then(() => setSaveState("saved"))
+      .saveAnamnesis(id, snapshot)
+      .then(() => {
+        if (pendingFields.current === snapshot) pendingFields.current = null;
+        setSaveState("saved");
+      })
       .catch(() => setSaveState("error"));
   };
 
