@@ -1,13 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "@tanstack/react-router";
 import { useMemo } from "react";
 import * as db from "@/lib/nutrios/repository";
 import * as labDb from "@/modules/exames/infrastructure/labs-repository";
 import { acceptedClinicalContext, type ClinicalReasoning } from "../domain/clinical-reasoning";
 import { ClinicalReasoningPanel } from "./clinical-reasoning-panel";
 
-export function DiagnosisPanel({ hypotheses, flags, onChange }: { hypotheses: string[]; flags: string[]; onChange: (hypotheses: string[]) => void }) {
-  const { id } = useParams({ from: "/consulta/$id" });
+type Props = {
+  consultationId: string;
+  hypotheses: string[];
+  flags: string[];
+  onChange: (hypotheses: string[]) => void;
+};
+
+export function DiagnosisPanel({ consultationId: id, hypotheses, flags, onChange }: Props) {
   const consultation = useQuery({ queryKey: ["consultation", id], queryFn: () => db.getConsultation(id) });
   const anamnesis = useQuery({ queryKey: ["anamnesis", id], queryFn: () => db.getAnamnesis(id) });
   const anthropometry = useQuery({ queryKey: ["anthropometry", id], queryFn: () => db.getAnthropometry(id) });
@@ -23,7 +28,10 @@ export function DiagnosisPanel({ hypotheses, flags, onChange }: { hypotheses: st
   const anthroText = useMemo(() => anthropometry.data ? `${JSON.stringify(anthropometry.data.data)}\nInterpretação revisada: ${anthropometry.data.interpretation || "—"}` : "", [anthropometry.data]);
   const energyText = useMemo(() => conduct.data?.energy ? JSON.stringify(conduct.data.energy) : "", [conduct.data?.energy]);
   const recallText = useMemo(() => JSON.stringify(recall.data ?? []), [recall.data]);
-  const labText = useMemo(() => (labs.data ?? []).filter((item) => item.review_status === "confirmed" && item.value !== null).map((item) => `${item.analyte_name}: ${item.value} ${item.unit ?? ""}${item.is_derived ? ` [calculado: ${item.calculation_version ?? item.calculation_key ?? "índice derivado"}]` : " [medido]"}`).join("\n"), [labs.data]);
+  const labText = useMemo(() => (labs.data ?? [])
+    .filter((item) => item.review_status === "confirmed" && item.value !== null)
+    .map((item) => `${item.analyte_name}: ${item.value} ${item.unit ?? ""}${item.is_derived ? ` [calculado: ${item.calculation_version ?? item.calculation_key ?? "índice derivado"}]` : " [medido]"}`)
+    .join("\n"), [labs.data]);
 
   const handleReasoningChange = (reasoning: ClinicalReasoning) => {
     const accepted = acceptedClinicalContext(reasoning).hypotheses.map((item) => item.title).filter(Boolean);
@@ -36,7 +44,7 @@ export function DiagnosisPanel({ hypotheses, flags, onChange }: { hypotheses: st
   }
 
   return <div className="space-y-3">
-    {(hypotheses.length || flags.length) ? <div className="rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground">A análise rápida acima foi registrada. A área abaixo transforma essas sugestões em raciocínio rastreável, com evidências, prioridades e validação profissional.</div> : null}
+    {(hypotheses.length || flags.length) ? <div className="rounded-md bg-muted/30 px-3 py-2 text-xs text-muted-foreground">Registros anteriores foram preservados. A análise abaixo organiza o raciocínio com evidências, prioridades e validação profissional.</div> : null}
     <ClinicalReasoningPanel
       consultationId={id}
       anamnesis={`${anamnesisText}\n\nTranscrição relevante:\n${transcriptText.slice(-12000)}`}
