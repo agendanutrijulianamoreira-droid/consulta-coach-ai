@@ -4,7 +4,7 @@ import {
   mergeAnamnesisSuggestions,
   updateAnamnesisField,
 } from "./anamnesis";
-import type { AnamnesisFields } from "@/lib/nutrios/types";
+import type { AnamnesisFields, SuggestionStatus } from "@/lib/nutrios/types";
 
 describe("mergeAnamnesisSuggestions", () => {
   test("fills an empty field from the transcript", () => {
@@ -30,9 +30,9 @@ describe("mergeAnamnesisSuggestions", () => {
     expect(result.sono?.status).toBe("sugerido");
   });
 
-  test.each(["aceito", "editado", "recusado"] as const)(
-    "never overwrites a %s field reviewed by the professional",
-    (status) => {
+  const reviewedStatuses: SuggestionStatus[] = ["aceito", "editado", "recusado"];
+  for (const status of reviewedStatuses) {
+    test(`never overwrites a ${status} field reviewed by the professional`, () => {
       const current: AnamnesisFields = {
         medicamentos: { value: "Metformina 500 mg à noite", status, source: "profissional" },
       };
@@ -42,8 +42,8 @@ describe("mergeAnamnesisSuggestions", () => {
       });
 
       expect(result.medicamentos).toEqual(current.medicamentos);
-    },
-  );
+    });
+  }
 
   test("ignores null, blank and whitespace-only extraction values", () => {
     const current: AnamnesisFields = {
