@@ -16,27 +16,19 @@ export type EerActivity = "sedentary" | "low_active" | "active" | "very_active";
 
 export interface EnergyInputs {
   weight: number | null;
-  height: number | null; // cm
+  height: number | null;
   age: number | null;
   sex: EnergySex;
-  leanMass: number | null; // kg
-  /** Fórmula escolhida. EER é tratada como estimativa de gasto total. */
+  leanMass: number | null;
   formula: string;
-  /** Estratégia para atividade: fator diário OU exercício informado em MET. */
   exerciseMode: ExerciseMode;
   activityFactor: number;
-  /** Categoria própria usada pela equação EER/DRI 2005. */
   eerActivity: EerActivity;
-  /** Fator clínico de estresse/injúria, aplicado somente quando selecionado conscientemente. */
   injuryFactor: number;
-  /** Atividade estruturada em MET e duração diária. */
   met: number | null;
   metMinutes: number | null;
-  /** Adicional energético de gestação/lactação (DRI 2005) ou nenhum. */
   pregnancy: string;
-  /** Ajuste da prescrição sobre o GET de manutenção (déficit negativo / superávit positivo). */
   manualAdjust: number;
-  /** Compatibilidade de leitura de registros antigos; não deve ser persistido em novos cálculos. */
   male?: boolean | undefined;
 }
 
@@ -65,10 +57,6 @@ export const ACTIVITY_FACTORS = [
   { value: 1.9, label: "Extremamente ativo (1,90)" },
 ];
 
-/**
- * Não associa doença a um multiplicador fixo: a magnitude do estresse metabólico
- * depende do quadro e deve ser escolhida pela nutricionista.
- */
 export const INJURY_FACTORS = [
   { value: 1, label: "Sem fator adicional (1,00)" },
   { value: 1.1, label: "Estresse metabólico leve (1,10)" },
@@ -107,7 +95,6 @@ export const ENERGY_FORMULAS = [
 function resolvedSex(input: EnergyInputs): EnergySex {
   if (input.sex === "male" || input.sex === "female") return input.sex;
   if (input.male === true) return "male";
-  // `male: false` de registros antigos não é suficiente para inferir sexo feminino.
   return null;
 }
 
@@ -129,9 +116,7 @@ function faoCoefficients(age: number, sex: Exclude<EnergySex, null>): { a: numbe
 }
 
 function eerPhysicalActivityCoefficient(sex: Exclude<EnergySex, null>, category: EerActivity) {
-  if (sex === "male") {
-    return { sedentary: 1, low_active: 1.11, active: 1.25, very_active: 1.48 }[category];
-  }
+  if (sex === "male") return { sedentary: 1, low_active: 1.11, active: 1.25, very_active: 1.48 }[category];
   return { sedentary: 1, low_active: 1.12, active: 1.27, very_active: 1.45 }[category];
 }
 
@@ -143,77 +128,30 @@ export interface EnergyEstimate {
   requires?: string[] | undefined;
 }
 
-/** Estimativas de TMB/GER. EER fica separada porque já é uma estimativa de necessidade total. */
 export function basalEstimates(input: EnergyInputs): EnergyEstimate[] {
   const { weight: p, height: a, age: i, leanMass } = input;
   const sex = resolvedSex(input);
   const ready = p !== null && a !== null && i !== null && sex !== null;
   const r = (value: number | null) => (value === null ? null : Math.round(value));
-  const sexMissing = sex === null ? ["sexo biológico"] : undefined;
+  const sexMissing = sex === null ? ["sexo biológico"] : [];
+  const baseMissing = [...(p === null ? ["peso"] : []), ...(a === null ? ["altura"] : []), ...(i === null ? ["idade"] : []), ...sexMissing];
 
   return [
-    {
-      key: "mifflin",
-      label: "Mifflin-St Jeor (1990)",
-      kcal: r(ready ? 10 * p! + 6.25 * a! - 5 * i! + (sex === "male" ? 5 : -161) : null),
-      note: "Adultos; usa peso, altura, idade e sexo biológico.",
-      requires: !ready ? [...(p === null ? ["peso"] : []), ...(a === null ? ["altura"] : []), ...(i === null ? ["idade"] : []), ...(sexMissing ?? [])] : undefined,
-    },
-    {
-      key: "harris_rev",
-      label: "Harris-Benedict revisada (1984)",
-      kcal: r(ready ? (sex === "male" ? 88.362 + 13.397 * p! + 4.799 * a! - 5.677 * i! : 447.593 + 9.247 * p! + 3.098 * a! - 4.33 * i!) : null),
-      requires: !ready ? [...(p === null ? ["peso"] : []), ...(a === null ? ["altura"] : []), ...(i === null ? ["idade"] : []), ...(sexMissing ?? [])] : undefined,
-    },
-    {
-      key: "harris",
-      label: "Harris-Benedict original (1919)",
-      kcal: r(ready ? (sex === "male" ? 66.47 + 13.75 * p! + 5.003 * a! - 6.755 * i! : 655.1 + 9.563 * p! + 1.85 * a! - 4.676 * i!) : null),
-      note: "Mantida para comparação histórica.",
-      requires: !ready ? [...(p === null ? ["peso"] : []), ...(a === null ? ["altura"] : []), ...(i === null ? ["idade"] : []), ...(sexMissing ?? [])] : undefined,
-    },
-    {
-      key: "fao",
-      label: "FAO/OMS/UNU",
-      kcal: r(p !== null && i !== null && sex !== null ? (() => { const c = faoCoefficients(i, sex); return c.a * p + c.b; })() : null),
-      note: "Equação dependente da faixa etária e sexo biológico.",
-      requires: p === null || i === null || sex === null ? [...(p === null ? ["peso"] : []), ...(i === null ? ["idade"] : []), ...(sexMissing ?? [])] : undefined,
-    },
-    {
-      key: "owen",
-      label: "Owen",
-      kcal: r(p !== null && sex !== null ? (sex === "male" ? 879 + 10.2 * p : 795 + 7.18 * p) : null),
-      requires: p === null || sex === null ? [...(p === null ? ["peso"] : []), ...(sexMissing ?? [])] : undefined,
-    },
-    {
-      key: "cunningham",
-      label: "Cunningham",
-      kcal: r(leanMass !== null ? 500 + 22 * leanMass : null),
-      note: leanMass === null ? "Requer massa livre de gordura válida." : "Baseada na massa livre de gordura.",
-      requires: leanMass === null ? ["massa livre de gordura"] : undefined,
-    },
-    {
-      key: "katch",
-      label: "Katch-McArdle",
-      kcal: r(leanMass !== null ? 370 + 21.6 * leanMass : null),
-      note: leanMass === null ? "Requer massa livre de gordura válida." : "Baseada na massa livre de gordura.",
-      requires: leanMass === null ? ["massa livre de gordura"] : undefined,
-    },
+    { key: "mifflin", label: "Mifflin-St Jeor (1990)", kcal: r(ready ? 10 * p! + 6.25 * a! - 5 * i! + (sex === "male" ? 5 : -161) : null), note: "Adultos; usa peso, altura, idade e sexo biológico.", requires: !ready ? baseMissing : undefined },
+    { key: "harris_rev", label: "Harris-Benedict revisada (1984)", kcal: r(ready ? (sex === "male" ? 88.362 + 13.397 * p! + 4.799 * a! - 5.677 * i! : 447.593 + 9.247 * p! + 3.098 * a! - 4.33 * i!) : null), requires: !ready ? baseMissing : undefined },
+    { key: "harris", label: "Harris-Benedict original (1919)", kcal: r(ready ? (sex === "male" ? 66.47 + 13.75 * p! + 5.003 * a! - 6.755 * i! : 655.1 + 9.563 * p! + 1.85 * a! - 4.676 * i!) : null), note: "Mantida para comparação histórica.", requires: !ready ? baseMissing : undefined },
+    { key: "fao", label: "FAO/OMS/UNU", kcal: r(p !== null && i !== null && sex !== null ? (() => { const c = faoCoefficients(i, sex); return c.a * p + c.b; })() : null), note: "Dependente da faixa etária e sexo biológico.", requires: p === null || i === null || sex === null ? [...(p === null ? ["peso"] : []), ...(i === null ? ["idade"] : []), ...sexMissing] : undefined },
+    { key: "owen", label: "Owen", kcal: r(p !== null && sex !== null ? (sex === "male" ? 879 + 10.2 * p : 795 + 7.18 * p) : null), requires: p === null || sex === null ? [...(p === null ? ["peso"] : []), ...sexMissing] : undefined },
+    { key: "cunningham", label: "Cunningham", kcal: r(leanMass !== null ? 500 + 22 * leanMass : null), note: leanMass === null ? "Requer massa livre de gordura válida." : "Baseada na massa livre de gordura.", requires: leanMass === null ? ["massa livre de gordura"] : undefined },
+    { key: "katch", label: "Katch-McArdle", kcal: r(leanMass !== null ? 370 + 21.6 * leanMass : null), note: leanMass === null ? "Requer massa livre de gordura válida." : "Baseada na massa livre de gordura.", requires: leanMass === null ? ["massa livre de gordura"] : undefined },
   ];
 }
 
-/** EER de adultos pela DRI/IOM 2005. Não é TMB: já incorpora a atividade física. */
 export function eerEstimate(input: EnergyInputs): EnergyEstimate {
   const sex = resolvedSex(input);
   const { weight, height, age } = input;
   const ready = weight !== null && height !== null && age !== null && sex !== null && age >= 19;
-  const missing = [
-    ...(weight === null ? ["peso"] : []),
-    ...(height === null ? ["altura"] : []),
-    ...(age === null ? ["idade"] : []),
-    ...(sex === null ? ["sexo biológico"] : []),
-    ...(age !== null && age < 19 ? ["idade adulta (≥19 anos)"] : []),
-  ];
+  const missing = [...(weight === null ? ["peso"] : []), ...(height === null ? ["altura"] : []), ...(age === null ? ["idade"] : []), ...(sex === null ? ["sexo biológico"] : []), ...(age !== null && age < 19 ? ["idade adulta (≥19 anos)"] : [])];
   if (!ready) return { key: "eer", label: "EER — DRI/IOM 2005", kcal: null, note: "Necessidade energética total; não é TMB.", requires: missing };
   const pa = eerPhysicalActivityCoefficient(sex, input.eerActivity);
   const heightM = height / 100;
@@ -231,14 +169,10 @@ export interface EnergyIssue {
 export interface EnergyResult {
   estimates: EnergyEstimate[];
   eer: EnergyEstimate;
-  /** TMB/GER selecionada. Null quando EER foi escolhida. */
   bmr: number | null;
-  /** Exercício líquido acima do repouso; evita dupla contagem de 1 MET. */
   metKcal: number;
   pregnancyKcal: number;
-  /** GET antes do ajuste de prescrição. */
   maintenanceKcal: number | null;
-  /** Meta calórica final para alimentar o plano. Mantido também em `tee` por compatibilidade. */
   targetKcal: number | null;
   tee: number | null;
   issues: EnergyIssue[];
@@ -253,58 +187,36 @@ export function calculateEnergy(input: EnergyInputs): EnergyResult {
   const bmr = formulaKind === "basal" ? selected?.kcal ?? null : null;
   const issues: EnergyIssue[] = [];
 
-  if (!selected || selected.kcal === null) {
-    issues.push({ severity: "error", message: selected?.requires?.length ? `Faltam dados para ${selected.label}: ${selected.requires.join(", ")}.` : "A fórmula selecionada ainda não pode ser calculada." });
-  }
+  if (!selected || selected.kcal === null) issues.push({ severity: "error", message: selected?.requires?.length ? `Faltam dados para ${selected.label}: ${selected.requires.join(", ")}.` : "A fórmula selecionada ainda não pode ser calculada." });
 
   let metKcal = 0;
   if (formulaKind === "basal" && input.exerciseMode === "met" && input.met !== null && input.metMinutes !== null && input.weight !== null) {
     if (input.met < 1) issues.push({ severity: "warning", message: "MET abaixo de 1 foi desconsiderado no adicional de exercício." });
     else if (input.metMinutes > 0) metKcal = Math.round((input.met - 1) * input.weight * (input.metMinutes / 60));
   }
+  if (formulaKind === "basal" && input.exerciseMode === "met" && (input.met === null || input.metMinutes === null)) issues.push({ severity: "warning", message: "Modo MET selecionado: informe intensidade (MET) e minutos/dia." });
 
-  if (input.exerciseMode === "met" && (input.met === null || input.metMinutes === null)) {
-    issues.push({ severity: "warning", message: "Modo MET selecionado: informe intensidade (MET) e minutos/dia para adicionar o exercício." });
-  }
-
-  if (input.injuryFactor < 1 || input.injuryFactor > 2) {
-    issues.push({ severity: "error", message: "Fator de estresse/injúria fora da faixa aceita (1,00 a 2,00)." });
-  } else if (input.injuryFactor > 1) {
-    issues.push({ severity: "warning", message: "Fator de estresse/injúria é um ajuste clínico e não deve ser inferido automaticamente pelo diagnóstico." });
-  }
+  if (input.injuryFactor < 1 || input.injuryFactor > 2) issues.push({ severity: "error", message: "Fator de estresse/injúria fora da faixa aceita (1,00 a 2,00)." });
+  else if (input.injuryFactor > 1) issues.push({ severity: "warning", message: "Fator de estresse/injúria é uma decisão clínica e não é inferido automaticamente pelo diagnóstico." });
 
   const pregnancyKcal = PREGNANCY_OPTIONS.find((option) => option.value === input.pregnancy)?.kcal ?? 0;
-  if (input.pregnancy !== "nenhum" && resolvedSex(input) !== "female") {
-    issues.push({ severity: "error", message: "Gestação/lactação só pode ser aplicada quando o sexo biológico cadastrado é feminino." });
-  }
+  const sex = resolvedSex(input);
+  const invalidLifeStage = input.pregnancy !== "nenhum" && sex !== "female";
+  if (invalidLifeStage) issues.push({ severity: "error", message: "Gestação/lactação só pode ser aplicada quando o sexo biológico cadastrado é feminino." });
 
   let maintenanceKcal: number | null = null;
-  if (selected?.kcal !== null && selected?.kcal !== undefined && input.injuryFactor >= 1 && input.injuryFactor <= 2) {
+  if (selected?.kcal !== null && selected?.kcal !== undefined && input.injuryFactor >= 1 && input.injuryFactor <= 2 && !invalidLifeStage) {
     if (formulaKind === "total") {
-      // EER já incorpora atividade; não recebe fator de atividade nem MET adicional.
       maintenanceKcal = Math.round(selected.kcal * input.injuryFactor + pregnancyKcal);
-      if (input.exerciseMode === "met" && input.metKcal !== undefined) {
-        // Campo legado inexistente na interface atual; intencionalmente ignorado.
-      }
     } else {
       const activityComponent = input.exerciseMode === "activity_factor" ? input.activityFactor : 1.2;
       maintenanceKcal = Math.round(selected.kcal * activityComponent * input.injuryFactor + metKcal + pregnancyKcal);
     }
   }
 
-  const targetKcal = maintenanceKcal === null ? null : Math.round(maintenanceKcal + input.manualAdjust);
-  if (targetKcal !== null && targetKcal <= 0) issues.push({ severity: "error", message: "O ajuste clínico resultou em meta calórica não positiva. Revise o ajuste." });
+  const prescribed = maintenanceKcal === null ? null : Math.round(maintenanceKcal + input.manualAdjust);
+  if (prescribed !== null && prescribed <= 0) issues.push({ severity: "error", message: "O ajuste clínico resultou em meta calórica não positiva. Revise o ajuste." });
+  const targetKcal = prescribed !== null && prescribed > 0 ? prescribed : null;
 
-  return {
-    estimates,
-    eer,
-    bmr,
-    metKcal,
-    pregnancyKcal,
-    maintenanceKcal,
-    targetKcal: targetKcal !== null && targetKcal > 0 ? targetKcal : null,
-    tee: targetKcal !== null && targetKcal > 0 ? targetKcal : null,
-    issues,
-    formulaKind,
-  };
+  return { estimates, eer, bmr, metKcal, pregnancyKcal, maintenanceKcal, targetKcal, tee: targetKcal, issues, formulaKind };
 }
