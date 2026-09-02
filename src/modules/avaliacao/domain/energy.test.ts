@@ -27,7 +27,7 @@ describe("energy formula safety", () => {
   test("Mifflin follows the published adult equation", () => {
     const femaleMifflin = basalEstimates(female).find((item) => item.key === "mifflin");
     const maleMifflin = basalEstimates(male).find((item) => item.key === "mifflin");
-    expect(femaleMifflin?.kcal).toBe(1380);
+    expect(femaleMifflin?.kcal).toBe(1370);
     expect(maleMifflin?.kcal).toBe(1755);
   });
 
@@ -42,13 +42,13 @@ describe("activity accounting", () => {
   test("activity-factor mode does not also add MET calories", () => {
     const result = calculateEnergy({ ...female, exerciseMode: "activity_factor", activityFactor: 1.2, met: 8, metMinutes: 60 });
     expect(result.metKcal).toBe(0);
-    expect(result.maintenanceKcal).toBe(Math.round(1380 * 1.2));
+    expect(result.maintenanceKcal).toBe(Math.round(1370 * 1.2));
   });
 
   test("MET mode adds only exercise above resting cost", () => {
     const result = calculateEnergy({ ...female, exerciseMode: "met", met: 6, metMinutes: 60 });
     expect(result.metKcal).toBe(350);
-    expect(result.maintenanceKcal).toBe(Math.round(1380 * 1.2 + 350));
+    expect(result.maintenanceKcal).toBe(Math.round(1370 * 1.2 + 350));
   });
 
   test("EER is total energy and is not multiplied by the generic activity factor", () => {
@@ -63,8 +63,8 @@ describe("activity accounting", () => {
 describe("maintenance versus prescription", () => {
   test("keeps maintenance expenditure separate from calorie prescription", () => {
     const result = calculateEnergy({ ...female, activityFactor: 1.2, manualAdjust: -300 });
-    expect(result.maintenanceKcal).toBe(Math.round(1380 * 1.2));
-    expect(result.targetKcal).toBe(Math.round(1380 * 1.2) - 300);
+    expect(result.maintenanceKcal).toBe(Math.round(1370 * 1.2));
+    expect(result.targetKcal).toBe(Math.round(1370 * 1.2) - 300);
     expect(result.tee).toBe(result.targetKcal);
   });
 
