@@ -48,7 +48,6 @@ const EMPTY: PatientInput = {
   tags: [],
 };
 
-/** Máscara de CPF aplicada durante a digitação (000.000.000-00). */
 function maskCpf(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 11);
   return digits
@@ -61,16 +60,17 @@ export function PatientDialog({
   open,
   onOpenChange,
   patient,
+  onOpenWorkspace,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   patient?: Patient | null;
+  onOpenWorkspace?: (patientId: string, consultationId?: string) => void;
 }) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [form, setForm] = useState<PatientInput>(EMPTY);
   const [tagDraft, setTagDraft] = useState("");
-  /** Etapa pós-cadastro: pergunta se a consulta deve ser registrada já. */
   const [created, setCreated] = useState<Patient | null>(null);
   const [consultDate, setConsultDate] = useState(() => new Date().toISOString().slice(0, 10));
 
@@ -138,6 +138,10 @@ export function PatientDialog({
       void queryClient.invalidateQueries({ queryKey: ["consultations"] });
       void queryClient.invalidateQueries({ queryKey: ["consultation-dates"] });
       onOpenChange(false);
+      if (onOpenWorkspace && created) {
+        onOpenWorkspace(created.id, consultation.id);
+        return;
+      }
       void navigate({ to: "/consulta/$id", params: { id: consultation.id } });
     },
     onError: (error: Error) => toast.error(error.message),
@@ -149,7 +153,7 @@ export function PatientDialog({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Registrar consulta de {created.name}?</DialogTitle>
-            <DialogDescription>Escolha a data do atendimento para já abrir a consulta, ou vá direto para a ficha do paciente.</DialogDescription>
+            <DialogDescription>Escolha a data do atendimento para já abrir a consulta, ou vá direto para o prontuário do paciente.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-1.5">
             <Label htmlFor="new-consult-date" className="text-xs text-muted-foreground">Data da consulta</Label>
@@ -160,10 +164,11 @@ export function PatientDialog({
               variant="ghost"
               onClick={() => {
                 onOpenChange(false);
-                void navigate({ to: "/paciente/$id", params: { id: created.id } });
+                if (onOpenWorkspace) onOpenWorkspace(created.id);
+                else void navigate({ to: "/paciente/$id", params: { id: created.id } });
               }}
             >
-              Abrir ficha
+              Abrir prontuário
             </Button>
             <Button onClick={() => startConsultation.mutate()} disabled={startConsultation.isPending}>
               {startConsultation.isPending ? "Abrindo…" : "Registrar consulta"}
@@ -204,13 +209,7 @@ export function PatientDialog({
             </Select>
           </Field>
           <Field id="patient-cpf" label="CPF">
-            <Input
-              id="patient-cpf"
-              inputMode="numeric"
-              value={form.cpf ?? ""}
-              onChange={(e) => set("cpf")(maskCpf(e.target.value))}
-              placeholder="000.000.000-00"
-            />
+            <Input id="patient-cpf" inputMode="numeric" value={form.cpf ?? ""} onChange={(e) => set("cpf")(maskCpf(e.target.value))} placeholder="000.000.000-00" />
           </Field>
           <Field id="patient-phone" label="Telefone">
             <Input id="patient-phone" value={form.phone ?? ""} onChange={(e) => set("phone")(e.target.value)} placeholder="(00) 00000-0000" />
@@ -222,51 +221,23 @@ export function PatientDialog({
             <>
               <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
                 <Label htmlFor="patient-pregnant" className="text-xs text-muted-foreground">Gestante</Label>
-                <Switch
-                  id="patient-pregnant"
-                  checked={!!form.is_pregnant}
-                  onCheckedChange={(checked) => setForm((prev) => ({ ...prev, is_pregnant: checked, pregnancy_weeks: checked ? prev.pregnancy_weeks : null }))}
-                />
+                <Switch id="patient-pregnant" checked={!!form.is_pregnant} onCheckedChange={(checked) => setForm((prev) => ({ ...prev, is_pregnant: checked, pregnancy_weeks: checked ? prev.pregnancy_weeks : null }))} />
               </div>
               <Field id="patient-weeks" label="Semanas de gestação">
-                <Input
-                  id="patient-weeks"
-                  type="number"
-                  min={1}
-                  max={42}
-                  disabled={!form.is_pregnant}
-                  value={form.pregnancy_weeks ?? ""}
-                  onChange={(e) => setForm((prev) => ({ ...prev, pregnancy_weeks: e.target.value ? Number(e.target.value) : null }))}
-                />
+                <Input id="patient-weeks" type="number" min={1} max={42} disabled={!form.is_pregnant} value={form.pregnancy_weeks ?? ""} onChange={(e) => setForm((prev) => ({ ...prev, pregnancy_weeks: e.target.value ? Number(e.target.value) : null }))} />
               </Field>
             </>
           )}
           <Field className="sm:col-span-2" id="patient-tags" label="Tags (para filtrar pacientes)">
             <div className="grid gap-2">
               <div className="flex gap-2">
-                <Input
-                  id="patient-tags"
-                  value={tagDraft}
-                  onChange={(e) => setTagDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === ",") {
-                      e.preventDefault();
-                      addTag();
-                    }
-                  }}
-                  placeholder="ex.: emagrecimento, gestante, esportista"
-                />
+                <Input id="patient-tags" value={tagDraft} onChange={(e) => setTagDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(); } }} placeholder="ex.: emagrecimento, gestante, esportista" />
                 <Button type="button" variant="secondary" onClick={addTag}>Adicionar</Button>
               </div>
               {form.tags?.length ? (
                 <div className="flex flex-wrap gap-1.5">
                   {form.tags.map((tag) => (
-                    <Badge
-                      key={tag}
-                      variant="secondary"
-                      className="cursor-pointer"
-                      onClick={() => setForm((prev) => ({ ...prev, tags: (prev.tags ?? []).filter((t) => t !== tag) }))}
-                    >
+                    <Badge key={tag} variant="secondary" className="cursor-pointer" onClick={() => setForm((prev) => ({ ...prev, tags: (prev.tags ?? []).filter((t) => t !== tag) }))}>
                       {tag} ✕
                     </Badge>
                   ))}
@@ -279,9 +250,7 @@ export function PatientDialog({
           </Field>
           <DialogFooter className="sm:col-span-2">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button type="submit" disabled={!form.name.trim() || save.isPending}>
-              {save.isPending ? "Salvando…" : "Salvar"}
-            </Button>
+            <Button type="submit" disabled={!form.name.trim() || save.isPending}>{save.isPending ? "Salvando…" : "Salvar"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -290,10 +259,5 @@ export function PatientDialog({
 }
 
 function Field({ id, label, children, className }: { id: string; label: string; children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`grid gap-1.5 ${className ?? ""}`}>
-      <Label htmlFor={id} className="text-xs text-muted-foreground">{label}</Label>
-      {children}
-    </div>
-  );
+  return <div className={`grid gap-1.5 ${className ?? ""}`}><Label htmlFor={id} className="text-xs text-muted-foreground">{label}</Label>{children}</div>;
 }

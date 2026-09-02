@@ -1,10 +1,11 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Activity, ArrowRight, CalendarClock, Pencil, Plus, Search, Trash2, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/nutrios/app-shell";
 import { PatientDialog } from "@/components/nutrios/patient-dialog";
+import { PatientWorkspaceDialog, type WorkspaceSection } from "@/components/nutrios/patient-workspace-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -30,9 +31,9 @@ import {
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Pacientes — NutriOS" },
-      { name: "description", content: "Central de pacientes e consultas clínicas do NutriOS." },
-      { property: "og:title", content: "Pacientes — NutriOS" },
+      { title: "Pacientes — Cach AI" },
+      { name: "description", content: "Central de pacientes e consultas clínicas do Cach AI." },
+      { property: "og:title", content: "Pacientes — Cach AI" },
       { property: "og:description", content: "Inicie consultas e acompanhe a documentação clínica em um só lugar." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -41,14 +42,20 @@ export const Route = createFileRoute("/")({
   component: Home,
 });
 
+type WorkspaceState = {
+  patientId: string;
+  consultationId?: string | undefined;
+  section?: WorkspaceSection | undefined;
+} | null;
+
 function Home() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Patient | null>(null);
   const [removing, setRemoving] = useState<Patient | null>(null);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [workspace, setWorkspace] = useState<WorkspaceState>(null);
   const patients = useQuery({ queryKey: ["patients"], queryFn: listPatients });
   const consultations = useQuery({ queryKey: ["consultations"], queryFn: listConsultations });
   const consultationDates = useQuery({ queryKey: ["consultation-dates"], queryFn: listConsultationDates });
@@ -63,7 +70,7 @@ function Home() {
       const matchesTerm =
         !term ||
         patient.name.toLowerCase().includes(term) ||
-        (patient.cpf ?? "").replace(/\D/g, "").includes(term.replace(/\D/g, "")) && !!term.replace(/\D/g, "");
+        ((patient.cpf ?? "").replace(/\D/g, "").includes(term.replace(/\D/g, "")) && !!term.replace(/\D/g, ""));
       const matchesTag = !tagFilter || (patient.tags ?? []).includes(tagFilter);
       return matchesTerm && matchesTag;
     });
@@ -78,11 +85,13 @@ function Home() {
     },
     onError: (error: Error) => toast.error(error.message),
   });
+
   const startConsultation = useMutation({
     mutationFn: (patientId: string) => createConsultation(patientId),
     onSuccess: (consultation) => {
       void queryClient.invalidateQueries({ queryKey: ["consultation-dates"] });
-      navigate({ to: "/consulta/$id", params: { id: consultation.id } });
+      void queryClient.invalidateQueries({ queryKey: ["consultations"] });
+      setWorkspace({ patientId: consultation.patient_id, consultationId: consultation.id, section: "consulta" });
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -94,7 +103,7 @@ function Home() {
           <div>
             <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Consultório</p>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Pacientes</h1>
-            <p className="mt-2 max-w-xl text-sm text-muted-foreground">Comece pelo paciente. O NutriOS organiza a consulta, revisa os dados clínicos e monta a conduta com rastreabilidade.</p>
+            <p className="mt-2 max-w-xl text-sm text-muted-foreground">Comece pelo paciente. O Cach AI reúne cadastro, consulta e documentação clínica em uma única experiência.</p>
           </div>
           <div className="grid grid-cols-2 gap-2 text-sm sm:min-w-56">
             <Metric icon={<Users />} label="Pacientes" value={patients.data?.length ?? 0} />
@@ -116,33 +125,25 @@ function Home() {
         <div className="mt-8 grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
           <section aria-labelledby="patients-heading">
             <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div><h2 id="patients-heading" className="text-sm font-semibold">Cadastrados</h2><p className="mt-1 text-xs text-muted-foreground">Selecione um paciente para abrir uma consulta.</p></div>
+              <div><h2 id="patients-heading" className="text-sm font-semibold">Cadastrados</h2><p className="mt-1 text-xs text-muted-foreground">Selecione um paciente para abrir o prontuário.</p></div>
               <div className="relative sm:w-56"><Search className="pointer-events-none absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar paciente" aria-label="Buscar paciente" className="h-8 pl-8 text-xs" /></div>
             </div>
             {allTags.length ? (
               <div className="mb-3 flex flex-wrap gap-1.5">
                 <Badge variant={tagFilter ? "outline" : "secondary"} className="cursor-pointer" onClick={() => setTagFilter(null)}>Todas</Badge>
                 {allTags.map((tag) => (
-                  <Badge key={tag} variant={tagFilter === tag ? "secondary" : "outline"} className="cursor-pointer" onClick={() => setTagFilter(tagFilter === tag ? null : tag)}>
-                    {tag}
-                  </Badge>
+                  <Badge key={tag} variant={tagFilter === tag ? "secondary" : "outline"} className="cursor-pointer" onClick={() => setTagFilter(tagFilter === tag ? null : tag)}>{tag}</Badge>
                 ))}
               </div>
             ) : null}
             <div className="divide-y divide-border rounded-md border border-border">
               {filteredPatients.length ? filteredPatients.map((patient) => (
                 <div key={patient.id} className="flex items-center justify-between gap-3 px-3 py-3 text-sm">
-                  <div className="min-w-0">
-                    <Link to="/paciente/$id" params={{ id: patient.id }} className="block truncate font-medium hover:underline">
-                      {patient.name}
-                    </Link>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{describePatient(patient)}</p>
-                    {patient.tags?.length ? (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {patient.tags.map((tag) => <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>)}
-                      </div>
-                    ) : null}
-                  </div>
+                  <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setWorkspace({ patientId: patient.id, section: "perfil" })}>
+                    <span className="block truncate font-medium hover:underline">{patient.name}</span>
+                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">{describePatient(patient)}</span>
+                    {patient.tags?.length ? <span className="mt-1 flex flex-wrap gap-1">{patient.tags.map((tag) => <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>)}</span> : null}
+                  </button>
                   <div className="flex shrink-0 items-center gap-1">
                     <Button size="icon" variant="ghost" aria-label={`Editar ${patient.name}`} onClick={() => { setEditing(patient); setDialogOpen(true); }}><Pencil /></Button>
                     <Button size="icon" variant="ghost" aria-label={`Excluir ${patient.name}`} onClick={() => setRemoving(patient)}><Trash2 /></Button>
@@ -154,10 +155,10 @@ function Home() {
           </section>
 
           <section aria-labelledby="recent-heading">
-            <div className="mb-3"><h2 id="recent-heading" className="text-sm font-semibold">Consultas recentes</h2><p className="mt-1 text-xs text-muted-foreground">Retome a documentação de onde parou.</p></div>
+            <div className="mb-3"><h2 id="recent-heading" className="text-sm font-semibold">Consultas recentes</h2><p className="mt-1 text-xs text-muted-foreground">Retome a documentação dentro do prontuário.</p></div>
             <div className="divide-y divide-border rounded-md border border-border">
               {consultations.data?.length ? consultations.data.map((consultation) => (
-                <Button key={consultation.id} variant="ghost" className="h-auto w-full justify-between rounded-none px-3 py-3 text-left" onClick={() => navigate({ to: "/consulta/$id", params: { id: consultation.id } })}>
+                <Button key={consultation.id} variant="ghost" className="h-auto w-full justify-between rounded-none px-3 py-3 text-left" onClick={() => setWorkspace({ patientId: consultation.patient_id, consultationId: consultation.id, section: "consulta" })}>
                   <span className="min-w-0"><span className="block truncate font-medium">{consultation.patients?.name ?? "Paciente"}</span><span className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground"><CalendarClock className="size-3" />{formatDate(consultation.consultation_date ?? consultation.created_at)}</span></span>
                   <span className="shrink-0 text-xs text-muted-foreground">{consultation.status === "finalizada" ? "Finalizada" : "Em aberto"}</span>
                 </Button>
@@ -166,7 +167,20 @@ function Home() {
           </section>
         </div>
       </div>
-      <PatientDialog open={dialogOpen} onOpenChange={setDialogOpen} patient={editing} />
+
+      <PatientDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        patient={editing}
+        onOpenWorkspace={(patientId, consultationId) => setWorkspace({ patientId, consultationId, section: consultationId ? "consulta" : "perfil" })}
+      />
+      <PatientWorkspaceDialog
+        open={!!workspace}
+        patientId={workspace?.patientId ?? null}
+        initialConsultationId={workspace?.consultationId}
+        initialSection={workspace?.section}
+        onOpenChange={(open) => { if (!open) setWorkspace(null); }}
+      />
       <AlertDialog open={!!removing} onOpenChange={(open) => !open && setRemoving(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -194,7 +208,6 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(date);
 }
 
-/** Consolida o volume de consultas por dia, semana, mês e média mensal dos últimos 12 meses. */
 function summarize(rows: { consultation_date: string }[]) {
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
@@ -205,7 +218,6 @@ function summarize(rows: { consultation_date: string }[]) {
   const yearAgo = new Date(now);
   yearAgo.setFullYear(now.getFullYear() - 1);
   const yearStart = yearAgo.toISOString().slice(0, 10);
-
   const lastYear = rows.filter((row) => row.consultation_date >= yearStart).length;
   return {
     today: rows.filter((row) => row.consultation_date === today).length,
@@ -215,7 +227,6 @@ function summarize(rows: { consultation_date: string }[]) {
   };
 }
 
-/** Resumo textual do cadastro (idade, sexo, contato) exibido na listagem. */
 function describePatient(patient: Patient) {
   const parts: string[] = [];
   if (patient.birth_date) {
