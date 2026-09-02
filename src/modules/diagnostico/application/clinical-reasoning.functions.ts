@@ -56,16 +56,16 @@ export const generateClinicalReasoning = createServerFn({ method: "POST" })
           },
         },
       },
-      effort: "high",
+      effort: "medium",
     });
 
     const raw = parsed ?? { findings: [], flags: [], hypotheses: [], priorities: [], directions: [] };
     const reasoning: ClinicalReasoning = {
       findings: raw.findings.map((item) => ({ ...item, id: clinicalId("finding", `${item.source}-${item.label}`) })),
       flags: raw.flags,
-      hypotheses: raw.hypotheses.map((item) => ({ ...item, id: clinicalId("hyp", item.title), status: "suggested" })),
-      priorities: raw.priorities.map((item) => ({ ...item, id: clinicalId("priority", item.title), status: "suggested" })).sort((a, b) => a.rank - b.rank),
-      directions: raw.directions.map((item) => ({ ...item, id: clinicalId("direction", item.title), status: "suggested" })),
+      hypotheses: raw.hypotheses.map((item) => ({ ...item, id: clinicalId("hyp", item.title), status: "suggested" as const })),
+      priorities: raw.priorities.map((item) => ({ ...item, id: clinicalId("priority", item.title), status: "suggested" as const })).sort((a, b) => a.rank - b.rank),
+      directions: raw.directions.map((item) => ({ ...item, id: clinicalId("direction", item.title), status: "suggested" as const })),
       version: "clinical-reasoning-v1",
     };
     return reasoning;
