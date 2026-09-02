@@ -1,10 +1,28 @@
-import { Check, ChevronDown, Pencil, Plus, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useParams } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { Check, ChevronDown, Loader2, Pencil, Plus, RefreshCw, Save, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { DictationButton } from "@/components/nutrios/dictation";
-import { ANAMNESIS_FIELDS, type AnamnesisFields, type AnamnesisKey, type RecallItem } from "@/lib/nutrios/types";
+import * as db from "@/lib/nutrios/repository";
+import {
+  ANAMNESIS_FIELDS,
+  ANAMNESIS_SECTIONS,
+  type AnamnesisFields,
+  type AnamnesisKey,
+  type RecallItem,
+} from "@/lib/nutrios/types";
+import { extractClinicalAnamnesis } from "@/modules/consulta/application/anamnesis.functions";
+import {
+  anamnesisCompletion,
+  mergeAnamnesisSuggestions,
+  sectionCompletion,
+  updateAnamnesisField,
+} from "@/modules/consulta/domain/anamnesis";
 import {
   ANTHRO_SECTIONS,
   SKINFOLD_FORMULAS,
@@ -17,32 +35,338 @@ import {
   type SkinfoldFormula,
 } from "@/modules/avaliacao/domain/anthropometry";
 
-export function AnamnesisPanel({ fields, onChange }: { fields: AnamnesisFields; onChange: (next: AnamnesisFields) => void }) {
+type SaveState = "saved" | "pending" | "saving" | "error";
+
+export function AnamnesisPanel({
+  fields,
+  onChange,
+}: {
+  fields: AnamnesisFields;
+  onChange: (next: AnamnesisFields) => void;
+}) {
+  const { id } = useParams({ from: "/consulta/$id" });
+  const extract = useServerFn(extractClinicalAnamnesis);
+  const segments = useQuery({ queryKey: ["segments", id], queryFn: () => db.listSegments(id) });
   const [editing, setEditing] = useState<AnamnesisKey | null>(null);
+  const [openSections, setOpenSections] = useState<string[]>(["motivo", "clinico"]);
+  const [extracting, setExtracting] = useState(false);
+  const [saveState, setSaveState] = useState<SaveState>("saved");
+  const saveTimer = useRef<number | null>(null);
+  const autoExtracted = useRef(false);
+
+  const transcript = useMemo(
+    () =>
+      (segments.data ?? [])
+        .map(
+          (segment) =>
+            `${segment.speaker === "nutricionista" ? "Nutricionista" : "Paciente"}: ${segment.content}`,
+        )
+        .join("\n"),
+    [segments.data],
+  );
+  const completion = useMemo(() => anamnesisCompletion(fields), [fields]);
+
+  const persist = useCallback(
+    (next: AnamnesisFields) => {
+      if (saveTimer.current) window.clearTimeout(saveTimer.current);
+      setSaveState("pending");
+      saveTimer.current = window.setTimeout(() => {
+        setSaveState("saving");
+        void db
+          .saveAnamnesis(id, next)
+          .then(() => setSaveState("saved"))
+          .catch(() => {
+            setSaveState("error");
+            toast.error("Não foi possível salvar a anamnese. As alterações permanecem na tela para nova tentativa.");
+          });
+      }, 700);
+    },
+    [id],
+  );
+
+  useEffect(
+    () => () => {
+      if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    },
+    [],
+  );
+
+  const apply = useCallback(
+    (next: AnamnesisFields) => {
+      onChange(next);
+      persist(next);
+    },
+    [onChange, persist],
+  );
+
   const update = (key: AnamnesisKey, value: Partial<AnamnesisFields[AnamnesisKey]>) => {
-    const current = fields[key] ?? { value: "", status: "sugerido" as const };
-    onChange({ ...fields, [key]: { ...current, ...value } });
+    apply(updateAnamnesisField(fields, key, value));
   };
-  return <div className="divide-y divide-border rounded-md border border-border">
-    <div className="flex items-center justify-between bg-muted/30 px-3 py-2 text-xs text-muted-foreground"><span>Campo clínico</span><span>Revisão profissional</span></div>
-    {ANAMNESIS_FIELDS.map(({ key, label }) => {
-      const field = fields[key]; const status = field?.status ?? "sugerido";
-      return <div key={key} className="group grid gap-2 px-3 py-3 sm:grid-cols-[150px_1fr_auto] sm:items-start">
-        <span className="pt-1 text-xs text-muted-foreground">{label}</span>
-        {editing === key ? <Textarea autoFocus value={field?.value ?? ""} onChange={(event) => update(key, { value: event.target.value, status: "editado" })} onBlur={() => setEditing(null)} className="min-h-9 text-sm" /> : <button type="button" onClick={() => setEditing(key)} className={`min-h-6 text-left text-sm ${status === "recusado" ? "text-muted-foreground line-through" : ""} ${field?.value ? "" : "text-muted-foreground"}`}>{field?.value || "—"}</button>}
-        <div className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
-          <StatusButton active={status === "aceito"} title="Aceitar sugestão" onClick={() => update(key, { status: "aceito" })}><Check /></StatusButton>
-          <StatusButton active={editing === key} title="Editar campo" onClick={() => setEditing(key)}><Pencil /></StatusButton>
-          <DictationButton size="icon" onText={(text) => update(key, { value: field?.value ? `${field.value} ${text}` : text, status: "editado" })} />
-          <StatusButton active={status === "recusado"} title="Recusar sugestão" onClick={() => update(key, { status: "recusado" })}><X /></StatusButton>
+
+  const extractFromConversation = useCallback(
+    async (silent = false) => {
+      if (!transcript.trim() || extracting) return;
+      setExtracting(true);
+      try {
+        const result = await extract({ data: { transcript } });
+        const next = mergeAnamnesisSuggestions(fields, result.fields);
+        apply(next);
+        if (!silent) toast.success("Anamnese atualizada com as novas informações da conversa.");
+      } catch (error) {
+        if (!silent) toast.error(error instanceof Error ? error.message : "Não foi possível extrair a anamnese.");
+      } finally {
+        setExtracting(false);
+      }
+    },
+    [apply, extract, extracting, fields, transcript],
+  );
+
+  useEffect(() => {
+    if (autoExtracted.current || !transcript.trim() || Object.keys(fields).length > 0) return;
+    autoExtracted.current = true;
+    void extractFromConversation(true);
+  }, [extractFromConversation, fields, transcript]);
+
+  const acceptAllSuggestions = () => {
+    let changed = false;
+    const next: AnamnesisFields = { ...fields };
+    for (const { key } of ANAMNESIS_FIELDS) {
+      const item = fields[key];
+      if (item?.value.trim() && item.status === "sugerido") {
+        next[key] = { ...item, status: "aceito" };
+        changed = true;
+      }
+    }
+    if (changed) apply(next);
+  };
+
+  const retrySave = () => {
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    setSaveState("saving");
+    void db
+      .saveAnamnesis(id, fields)
+      .then(() => setSaveState("saved"))
+      .catch(() => setSaveState("error"));
+  };
+
+  const toggleSection = (sectionId: string) =>
+    setOpenSections((current) =>
+      current.includes(sectionId)
+        ? current.filter((value) => value !== sectionId)
+        : [...current, sectionId],
+    );
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-md border border-border p-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-medium">Anamnese clínica</h2>
+              <SaveIndicator state={saveState} onRetry={retrySave} />
+            </div>
+            <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
+              A IA organiza apenas o que foi dito. Campos revisados por você nunca são sobrescritos por uma nova
+              extração.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {completion.suggested > 0 ? (
+              <Button type="button" variant="outline" size="sm" onClick={acceptAllSuggestions}>
+                <Check /> Aceitar sugestões ({completion.suggested})
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              disabled={!transcript.trim() || extracting}
+              onClick={() => void extractFromConversation(false)}
+            >
+              {extracting ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+              {extracting ? "Organizando…" : "Atualizar da conversa"}
+            </Button>
+          </div>
         </div>
-      </div>;
-    })}
-  </div>;
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
+          <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-primary transition-[width]"
+              style={{ width: `${completion.percent}%` }}
+            />
+          </div>
+          <p className="text-xs tabular-nums text-muted-foreground">
+            {completion.completed}/{completion.total} campos essenciais · {completion.percent}%
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {ANAMNESIS_SECTIONS.map((section) => {
+          const expanded = openSections.includes(section.id);
+          const sectionProgress = sectionCompletion(fields, section.id);
+          return (
+            <section key={section.id} className="overflow-hidden rounded-md border border-border">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-4 bg-muted/20 px-4 py-3 text-left"
+                aria-expanded={expanded}
+                onClick={() => toggleSection(section.id)}
+              >
+                <span>
+                  <span className="block text-sm font-medium">{section.title}</span>
+                  <span className="mt-0.5 block text-xs text-muted-foreground">{section.description}</span>
+                </span>
+                <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
+                  {sectionProgress.total ? `${sectionProgress.filled}/${sectionProgress.total}` : "opcional"}
+                  <ChevronDown className={`size-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
+                </span>
+              </button>
+
+              {expanded ? (
+                <div className="divide-y divide-border">
+                  {section.fields.map((key) => {
+                    const definition = ANAMNESIS_FIELDS.find((item) => item.key === key);
+                    if (!definition) return null;
+                    const field = fields[key];
+                    const status = field?.status ?? "sugerido";
+                    return (
+                      <div
+                        key={key}
+                        className="group grid gap-2 px-4 py-3 sm:grid-cols-[180px_1fr_auto] sm:items-start"
+                      >
+                        <span className="pt-1 text-xs text-muted-foreground">
+                          {definition.label}
+                          {definition.required ? <span className="ml-1 text-primary" title="Campo essencial">•</span> : null}
+                        </span>
+
+                        {editing === key ? (
+                          <Textarea
+                            autoFocus
+                            value={field?.value ?? ""}
+                            onChange={(event) =>
+                              update(key, { value: event.target.value, status: "editado", source: "profissional" })
+                            }
+                            onBlur={() => setEditing(null)}
+                            className="min-h-20 text-sm"
+                          />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setEditing(key)}
+                            className={`min-h-7 whitespace-pre-wrap text-left text-sm leading-5 ${
+                              status === "recusado" ? "text-muted-foreground line-through" : ""
+                            } ${field?.value ? "" : "text-muted-foreground"}`}
+                          >
+                            {field?.value || "Clique para preencher"}
+                            {field?.value && status === "sugerido" ? (
+                              <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                                sugestão da IA
+                              </span>
+                            ) : null}
+                          </button>
+                        )}
+
+                        <div className="flex items-center gap-1">
+                          <StatusButton
+                            active={status === "aceito"}
+                            title="Validar informação"
+                            onClick={() => update(key, { status: "aceito" })}
+                          >
+                            <Check />
+                          </StatusButton>
+                          <StatusButton
+                            active={editing === key}
+                            title="Editar campo"
+                            onClick={() => setEditing(key)}
+                          >
+                            <Pencil />
+                          </StatusButton>
+                          <DictationButton
+                            size="icon"
+                            onText={(text) =>
+                              update(key, {
+                                value: field?.value ? `${field.value} ${text}` : text,
+                                status: "editado",
+                                source: "profissional",
+                              })
+                            }
+                          />
+                          {field?.value && status === "sugerido" ? (
+                            <StatusButton
+                              active={status === "recusado"}
+                              title="Descartar sugestão"
+                              onClick={() => update(key, { status: "recusado" })}
+                            >
+                              <X />
+                            </StatusButton>
+                          ) : null}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
+            </section>
+          );
+        })}
+      </div>
+
+      <p className="px-1 text-xs leading-5 text-muted-foreground">
+        • Campo essencial para uma anamnese completa. Campos opcionais permanecem disponíveis quando forem
+        clinicamente aplicáveis.
+      </p>
+    </div>
+  );
 }
 
-function StatusButton({ children, active, title, onClick }: { children: React.ReactNode; active: boolean; title: string; onClick: () => void }) {
-  return <Button type="button" variant="ghost" size="icon" title={title} aria-label={title} onClick={onClick} className={`size-7 ${active ? "bg-accent text-foreground" : "text-muted-foreground"}`}>{children}</Button>;
+function SaveIndicator({ state, onRetry }: { state: SaveState; onRetry: () => void }) {
+  if (state === "error") {
+    return (
+      <button type="button" onClick={onRetry} className="text-xs text-destructive underline-offset-4 hover:underline">
+        Falha ao salvar · tentar novamente
+      </button>
+    );
+  }
+  if (state === "saving") {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+        <Loader2 className="size-3 animate-spin" /> Salvando…
+      </span>
+    );
+  }
+  if (state === "pending") return <span className="text-xs text-muted-foreground">Alterações pendentes</span>;
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+      <Save className="size-3" /> Salvo
+    </span>
+  );
+}
+
+function StatusButton({
+  children,
+  active,
+  title,
+  onClick,
+}: {
+  children: React.ReactNode;
+  active: boolean;
+  title: string;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      title={title}
+      aria-label={title}
+      onClick={onClick}
+      className={`size-7 ${active ? "bg-accent text-foreground" : "text-muted-foreground"}`}
+    >
+      {children}
+    </Button>
+  );
 }
 
 /**
