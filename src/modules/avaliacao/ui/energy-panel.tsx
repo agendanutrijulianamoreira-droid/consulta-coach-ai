@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "@tanstack/react-router";
 import { AlertTriangle, Check, Equal, Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,8 +16,7 @@ import {
   type EnergyInputs,
 } from "@/modules/avaliacao/domain/energy";
 
-export function EnergyPanel({ value, onChange }: { value: EnergyInputs; onChange: (next: EnergyInputs) => void }) {
-  const { id } = useParams({ from: "/consulta/$id" });
+export function EnergyPanel({ consultationId: id, value, onChange }: { consultationId: string; value: EnergyInputs; onChange: (next: EnergyInputs) => void }) {
   const consultation = useQuery({ queryKey: ["consultation", id], queryFn: () => db.getConsultation(id) });
   const patientSex = biologicalSex(consultation.data?.patients?.sex ?? null);
   const result = calculateEnergy(value);
