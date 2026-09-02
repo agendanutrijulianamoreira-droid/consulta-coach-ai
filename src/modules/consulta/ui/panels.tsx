@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { AlertTriangle, Bed, Check, ChevronDown, Loader2, Pencil, Plus, RefreshCw, Save, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -47,8 +46,7 @@ import {
 
 type SaveState = "saved" | "pending" | "saving" | "error";
 
-export function AnamnesisPanel({ fields, onChange }: { fields: AnamnesisFields; onChange: (next: AnamnesisFields) => void }) {
-  const { id } = useParams({ from: "/consulta/$id" });
+export function AnamnesisPanel({ consultationId: id, fields, onChange }: { consultationId: string; fields: AnamnesisFields; onChange: (next: AnamnesisFields) => void }) {
   const extract = useServerFn(extractClinicalAnamnesis);
   const segments = useQuery({ queryKey: ["segments", id], queryFn: () => db.listSegments(id) });
   const storedAnamnesis = useQuery({ queryKey: ["anamnesis", id], queryFn: () => db.getAnamnesis(id) });
@@ -191,7 +189,8 @@ function StatusButton({ children, active, title, onClick }: { children: React.Re
   return <Button type="button" variant="ghost" size="icon" title={title} aria-label={title} onClick={onClick} className={`size-7 ${active ? "bg-accent text-foreground" : "text-muted-foreground"}`}>{children}</Button>;
 }
 
-export function AnthropometryPanel({ data, interpretation, profile, formula, onFormulaChange, onChange }: {
+export function AnthropometryPanel({ consultationId: id, data, interpretation, profile, formula, onFormulaChange, onChange }: {
+  consultationId: string;
   data: AnthroData;
   interpretation: string;
   profile: PatientProfile;
@@ -199,7 +198,6 @@ export function AnthropometryPanel({ data, interpretation, profile, formula, onF
   onFormulaChange: (value: SkinfoldFormula) => void;
   onChange: (next: AnthroData) => void;
 }) {
-  const { id } = useParams({ from: "/consulta/$id" });
   const [open, setOpen] = useState<string[]>(["basicos"]);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [showBedridden, setShowBedridden] = useState(false);
