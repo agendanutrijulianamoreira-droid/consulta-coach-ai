@@ -8,8 +8,9 @@ import { ConsultationTimer } from "@/components/nutrios/consultation-timer";
 import { DictationField } from "@/components/nutrios/dictation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AnamnesisPanel, AnthropometryPanel, DiagnosisPanel } from "@/modules/consulta/ui/panels";
+import { AnamnesisPanel, AnthropometryPanel } from "@/modules/consulta/ui/panels";
 import { FoodRecallPanel } from "@/modules/consulta/ui/recall-panel";
+import { DiagnosisPanel } from "@/modules/diagnostico/ui/diagnosis-adapter";
 import { EnergyPanel } from "@/modules/avaliacao/ui/energy-panel";
 import { analyzeAnthropometry, ageFromBirthDate, biologicalSex, type AnthroData, type SkinfoldFormula } from "@/modules/avaliacao/domain/anthropometry";
 import { DEFAULT_ENERGY, calculateEnergy, type EnergyInputs } from "@/modules/avaliacao/domain/energy";
@@ -19,7 +20,7 @@ import { buildMealPlan, defaultMacros, recalculatePlan, scaleItem } from "@/modu
 import { blobToBase64, startRecording, type AudioRecorder } from "@/modules/transcricao/recorder";
 import { countPendingAudioWindows, listPendingAudioWindows, markPendingAudioAttempt, removePendingAudioWindow, savePendingAudioWindow, type PendingAudioWindow } from "@/modules/transcricao/pending-queue";
 import * as db from "@/lib/nutrios/repository";
-import { analyzeConsultation, describeMealPlan, generateClinicalSummary, generateReport, interpretAnthropometry, transcribeChunk } from "@/lib/nutrios/ai.functions";
+import { describeMealPlan, generateClinicalSummary, generateReport, interpretAnthropometry, transcribeChunk } from "@/lib/nutrios/ai.functions";
 import { MEAL_SLOT_LABELS, RESTRICTION_OPTIONS, type AnamnesisFields, type Food, type MealPlan, type RecallItem } from "@/lib/nutrios/types";
 
 export const CONSULTATION_STEPS = ["Consulta", "Anamnese", "Antropometria", "Cálculos", "Recordatório", "Exames", "Diagnóstico", "Cardápio"] as const;
@@ -31,7 +32,7 @@ const HINTS: Record<number, string> = {
   3: "Escolha a fórmula e ajuste os fatores — manutenção e prescrição ficam separadas.",
   4: "Organize o dia alimentar pela conversa, por voz ou manualmente e confira as lacunas do relato.",
   5: "Digite, dite ou importe exames; revise a extração e acompanhe cada marcador entre consultas.",
-  6: "A hipótese considera toda a consulta, inclusive exames confirmados, e depende da sua validação.",
+  6: "Organize achados, hipóteses, prioridades e direcionamentos com evidências e validação profissional.",
   7: "O cardápio já vem montado com os dados anteriores — edite e gere o parecer.",
 };
 
@@ -293,7 +294,7 @@ export function ConsultationWorkspace({
       {step === 3 ? <div className="space-y-4"><EnergyPanel consultationId={id} value={energy} onChange={setEnergy} /><ActionBar busy={busy === "energia"} disabled={busy !== null} label="Salvar cálculos" icon={<Save />} onAction={() => void run("energia", async () => db.saveConduct(id, { ...conduct, kcal: energyResult.targetKcal ?? energyResult.maintenanceKcal ?? conduct.kcal, energy: energy as unknown as Record<string, unknown> }))} /></div> : null}
       {step === 4 ? <FoodRecallPanel consultationId={id} items={recall} transcript={transcriptText} onChange={setRecall} /> : null}
       {step === 5 && patient ? <LabAssessmentPanel consultationId={id} patientId={patient.id} context={labContext} onCountChange={setLabCount} /> : null}
-      {step === 6 ? <div className="space-y-4"><ActionBar busy={busy === "diag"} disabled={busy !== null || !loaded} label="Analisar consulta completa" icon={<Sparkles />} onAction={() => void run("diag", async () => { const result = await analyzeConsultation({ data: { anamnesis: `${anamnesisText}\n\nTranscrição:\n${transcriptText.slice(-8000)}\n\nExames confirmados:\n${labText || "Sem exames confirmados"}`, anthropometry: `${analysisText}\n\n${energyText}`, recall: JSON.stringify(recall) } }); setFlags(result.flags); setHypotheses(result.hypotheses); await db.saveDiagnoses(id, result.hypotheses, result.flags); })} /><DiagnosisPanel hypotheses={hypotheses} flags={flags} onChange={(next) => { setHypotheses(next); void db.saveDiagnoses(id, next, flags); }} /></div> : null}
+      {step === 6 ? <DiagnosisPanel consultationId={id} hypotheses={hypotheses} flags={flags} onChange={(next) => { setHypotheses(next); void db.saveDiagnoses(id, next, flags); }} /> : null}
       {step === 7 ? <MenuStep conduct={conduct} setConduct={setConduct} busy={busy} foods={foods.data ?? []} plan={plan} targetKcal={energyResult.targetKcal ?? energyResult.tee} onGenerate={() => void generatePlan()} onUpdatePlan={updatePlan} onSave={() => void savePlan()} onFinish={() => void finish()} /> : null}
 
       {!embedded ? <div className="mt-8 flex items-center justify-between border-t border-border pt-4"><Button variant="ghost" size="sm" onClick={goPrevious} disabled={step === 0}><ArrowLeft /> Anterior</Button>{step < CONSULTATION_STEPS.length - 1 ? <Button size="sm" onClick={goNext} disabled={finalizingAudio}>Próxima etapa <ArrowRight /></Button> : <Link to="/prontuario/$id" params={{ id }}><Button size="sm" variant="secondary"><FileText /> Abrir parecer</Button></Link>}</div> : null}
