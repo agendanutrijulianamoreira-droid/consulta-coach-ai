@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileText, Pencil, Plus, X } from "lucide-react";
 import { toast } from "sonner";
@@ -25,8 +25,8 @@ export type WorkspaceSection =
 type Props = {
   open: boolean;
   patientId: string | null;
-  initialConsultationId?: string | null;
-  initialSection?: WorkspaceSection;
+  initialConsultationId?: string | null | undefined;
+  initialSection?: WorkspaceSection | undefined;
   onOpenChange: (open: boolean) => void;
 };
 
@@ -62,7 +62,7 @@ export function PatientWorkspaceDialog({
 }: Props) {
   const queryClient = useQueryClient();
   const [section, setSection] = useState<WorkspaceSection>(initialSection);
-  const [consultationId, setConsultationId] = useState<string | null>(initialConsultationId);
+  const [consultationId, setConsultationId] = useState<string | null>(initialConsultationId ?? null);
   const [editing, setEditing] = useState(false);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -78,7 +78,7 @@ export function PatientWorkspaceDialog({
     enabled: open && !!patientId,
   });
 
-  const rows = dossier.data?.consultations ?? [];
+  const rows = useMemo(() => dossier.data?.consultations ?? [], [dossier.data?.consultations]);
   const selectedConsultation = useMemo(
     () => rows.find((item) => item.id === consultationId) ?? rows[0] ?? null,
     [rows, consultationId],
@@ -87,12 +87,13 @@ export function PatientWorkspaceDialog({
   useEffect(() => {
     if (!open) return;
     setSection(initialSection);
-    setConsultationId(initialConsultationId);
+    setConsultationId(initialConsultationId ?? null);
   }, [open, patientId, initialConsultationId, initialSection]);
 
   useEffect(() => {
-    if (!open || consultationId || !rows.length) return;
-    setConsultationId(rows[0].id);
+    const first = rows[0];
+    if (!open || consultationId || !first) return;
+    setConsultationId(first.id);
   }, [open, rows, consultationId]);
 
   const start = useMutation({
@@ -109,10 +110,11 @@ export function PatientWorkspaceDialog({
 
   const selectSection = (next: WorkspaceSection) => {
     setSection(next);
-    if (next in CONSULTATION_STEP && !consultationId && rows[0]) setConsultationId(rows[0].id);
+    const first = rows[0];
+    if (next in CONSULTATION_STEP && !consultationId && first) setConsultationId(first.id);
   };
 
-  const syncEmbeddedStep = () => {
+  const syncEmbeddedStep = useCallback(() => {
     const frame = iframeRef.current;
     const step = CONSULTATION_STEP[section];
     if (!frame || step === undefined) return;
@@ -125,20 +127,20 @@ export function PatientWorkspaceDialog({
     } catch {
       // Same-origin is expected in production. If unavailable, the consultation still remains usable.
     }
-  };
+  }, [section]);
 
   useEffect(() => {
     if (CONSULTATION_STEP[section] === undefined) return;
     const timer = window.setTimeout(syncEmbeddedStep, 40);
     return () => window.clearTimeout(timer);
-  }, [section, consultationId]);
+  }, [section, syncEmbeddedStep]);
 
   const p = patient.data;
 
   return (
     <Dialog open={open && !!patientId} onOpenChange={onOpenChange}>
       <DialogContent
-        className="h-[94vh] w-[94vw] max-w-none gap-0 overflow-hidden p-0 sm:max-w-none"
+        className="grid h-[94vh] w-[94vw] max-w-none grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-none"
         onOpenAutoFocus={(event) => event.preventDefault()}
       >
         <DialogTitle className="sr-only">Prontuário de {p?.name ?? "paciente"}</DialogTitle>
@@ -157,7 +159,7 @@ export function PatientWorkspaceDialog({
           </div>
         </header>
 
-        <div className="grid min-h-0 flex-1 grid-cols-[190px_minmax(0,1fr)] md:grid-cols-[210px_minmax(0,1fr)]">
+        <div className="grid min-h-0 grid-cols-[190px_minmax(0,1fr)] md:grid-cols-[210px_minmax(0,1fr)]">
           <aside className="border-r border-border bg-muted/20 px-3 py-4">
             <nav className="grid gap-1" aria-label="Seções do prontuário">
               {SECTIONS.map((item) => (
@@ -191,7 +193,10 @@ export function PatientWorkspaceDialog({
                 }}
               />
             ) : section === "parecer" ? (
-              <Report consultationId={selectedConsultation?.id ?? null} report={selectedConsultation ? dossier.data?.reports[selectedConsultation.id] : null} />
+              <Report
+                consultationId={selectedConsultation?.id ?? null}
+                report={selectedConsultation ? dossier.data?.reports[selectedConsultation.id] : undefined}
+              />
             ) : selectedConsultation ? (
               <div className="h-full min-h-[680px]">
                 <iframe
@@ -292,7 +297,7 @@ function History({
   );
 }
 
-function Report({ consultationId, report }: { consultationId: string | null; report?: string | null }) {
+function Report({ consultationId, report }: { consultationId: string | null; report?: string | null | undefined }) {
   return (
     <div className="mx-auto max-w-5xl px-6 py-7 lg:px-10 lg:py-9">
       <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Parecer</p>
@@ -321,7 +326,7 @@ function EmptyConsultation({ date, onDateChange, onStart, pending }: { date: str
   );
 }
 
-function Row({ label, value }: { label: string; value?: string | null }) {
+function Row({ label, value }: { label: string; value?: string | null | undefined }) {
   return <div className="flex items-center justify-between gap-4 py-2.5"><dt className="text-xs text-muted-foreground">{label}</dt><dd className="truncate text-sm">{value || "—"}</dd></div>;
 }
 
