@@ -44,8 +44,8 @@ export const Route = createFileRoute("/")({
 
 type WorkspaceState = {
   patientId: string;
-  consultationId?: string;
-  section?: WorkspaceSection;
+  consultationId?: string | undefined;
+  section?: WorkspaceSection | undefined;
 } | null;
 
 function Home() {
