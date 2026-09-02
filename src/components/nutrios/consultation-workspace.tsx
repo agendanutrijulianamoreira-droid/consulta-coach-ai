@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AnamnesisPanel, AnthropometryPanel } from "@/modules/consulta/ui/panels";
 import { FoodRecallPanel } from "@/modules/consulta/ui/recall-panel";
+import { acceptedClinicalContext } from "@/modules/diagnostico/domain/clinical-reasoning";
+import * as reasoningDb from "@/modules/diagnostico/infrastructure/reasoning-repository";
 import { DiagnosisPanel } from "@/modules/diagnostico/ui/diagnosis-adapter";
 import { EnergyPanel } from "@/modules/avaliacao/ui/energy-panel";
 import { analyzeAnthropometry, ageFromBirthDate, biologicalSex, type AnthroData, type SkinfoldFormula } from "@/modules/avaliacao/domain/anthropometry";
@@ -33,7 +35,7 @@ const HINTS: Record<number, string> = {
   4: "Organize o dia alimentar pela conversa, por voz ou manualmente e confira as lacunas do relato.",
   5: "Digite, dite ou importe exames; revise a extração e acompanhe cada marcador entre consultas.",
   6: "Organize achados, hipóteses, prioridades e direcionamentos com evidências e validação profissional.",
-  7: "O cardápio já vem montado com os dados anteriores — edite e gere o parecer.",
+  7: "O cardápio usa o raciocínio clínico validado como contexto — edite e gere o parecer.",
 };
 
 type ConsultationWorkspaceProps = {
@@ -146,6 +148,25 @@ export function ConsultationWorkspace({
     .map((item) => `${item.analyte_name}: ${item.value} ${item.unit ?? ""}${item.is_derived ? ` [calculado: ${item.calculation_version ?? item.calculation_key ?? "índice derivado"}]` : " [medido]"}`)
     .join("\n");
 
+  const getValidatedClinicalContext = useCallback(async () => {
+    const reasoning = await reasoningDb.getClinicalReasoning(id);
+    const accepted = acceptedClinicalContext(reasoning);
+    const sections = [
+      accepted.findings.length ? `Achados objetivos:\n${accepted.findings.map((item) => `- ${item.label}: ${item.detail}`).join("\n")}` : "",
+      accepted.flags.length ? `Sinalizações:\n${accepted.flags.map((item) => `- ${item}`).join("\n")}` : "",
+      accepted.hypotheses.length ? `Hipóteses nutricionais validadas:\n${accepted.hypotheses.map((item) => `- ${item.title}: ${item.rationale}${item.evidence.length ? ` | Evidências: ${item.evidence.join("; ")}` : ""}`).join("\n")}` : "",
+      accepted.priorities.length ? `Prioridades clínicas validadas:\n${accepted.priorities.map((item) => `- ${item.rank}. ${item.title}: ${item.rationale}`).join("\n")}` : "",
+      accepted.directions.length ? `Direcionamentos nutricionais validados:\n${accepted.directions.map((item) => `- ${item.title}: ${item.rationale}`).join("\n")}` : "",
+    ].filter(Boolean);
+    const hasReviewedReasoning = accepted.hypotheses.length > 0 || accepted.priorities.length > 0 || accepted.directions.length > 0;
+    if (hasReviewedReasoning) return sections.join("\n\n");
+    const legacy = [
+      flags.length ? `Sinalizações registradas:\n${flags.map((item) => `- ${item}`).join("\n")}` : "",
+      hypotheses.length ? `Hipóteses registradas:\n${hypotheses.map((item) => `- ${item}`).join("\n")}` : "",
+    ].filter(Boolean).join("\n\n");
+    return sections.length ? `${sections.join("\n\n")}${legacy ? `\n\n${legacy}` : ""}` : legacy;
+  }, [flags, hypotheses, id]);
+
   useEffect(() => { transcriptRef.current = transcriptText; }, [transcriptText]);
 
   const refreshPendingCount = useCallback(async () => {
@@ -228,12 +249,13 @@ export function ConsultationWorkspace({
   const generatePlan = async (notify = true) => {
     const targetKcal = energyResult.targetKcal ?? energyResult.tee ?? conduct.kcal ?? 2000;
     await run("plano", async () => {
+      const clinicalContext = await getValidatedClinicalContext();
       const macros = defaultMacros(targetKcal);
       const nextConduct: db.ConductRow = { ...conduct, kcal: targetKcal, energy: energy as unknown as Record<string, unknown> };
       const generated = buildMealPlan({ phase: nextConduct.phase, kcal: targetKcal, protein_g: nextConduct.protein_g ?? macros.protein_g, carb_g: nextConduct.carb_g ?? macros.carb_g, fat_g: nextConduct.fat_g ?? macros.fat_g, meals_count: nextConduct.meals_count, goal: nextConduct.goal, preferences: nextConduct.preferences, restrictions: nextConduct.restrictions }, foods.data ?? []);
-      const { rationale } = await describeMealPlan({ data: { plan: JSON.stringify(generated.meals), context: `${anamnesisText}\n${analysisText}\n${energyText}\nExames:\n${labText || "Sem exames confirmados"}\nObjetivo: ${nextConduct.goal ?? ""}\nFase: ${nextConduct.phase ?? ""}` } });
+      const { rationale } = await describeMealPlan({ data: { plan: JSON.stringify(generated.meals), context: `${anamnesisText}\n${analysisText}\n${energyText}\nExames:\n${labText || "Sem exames confirmados"}\n\nRaciocínio clínico validado:\n${clinicalContext || "Sem hipóteses, prioridades ou direcionamentos validados nesta consulta."}\n\nObjetivo: ${nextConduct.goal ?? ""}\nFase: ${nextConduct.phase ?? ""}` } });
       setConduct(nextConduct); setPlan({ plan: generated, rationale }); await db.saveConduct(id, nextConduct); await db.saveMealPlan(id, generated, rationale);
-    }, notify ? "Cardápio gerado." : "Cardápio pré-carregado.");
+    }, notify ? "Cardápio gerado com o contexto clínico validado." : "Cardápio pré-carregado.");
   };
 
   const updatePlan = (next: MealPlan) => setPlan((current) => (current ? { ...current, plan: next } : current));
@@ -241,21 +263,22 @@ export function ConsultationWorkspace({
 
   const finish = async () => {
     await run("parecer", async () => {
+      const clinicalContext = await getValidatedClinicalContext();
       const summary = await generateClinicalSummary({ data: { transcript: transcriptText, anamnesis: anamnesisText } });
       const report = await generateReport({ data: {
         patient: `${patient?.name ?? ""} | ${profile.age ?? "?"} anos | ${patient?.sex ?? "não informado"}`,
         anamnesis: anamnesisText,
         anthropometry: `${analysisText}\n\nExames laboratoriais confirmados:\n${labText || "Sem exames confirmados nesta consulta."}`,
         energy: energyText,
-        diagnosis: `Sinalizações: ${flags.join("; ")}\nHipóteses: ${hypotheses.join("; ")}`,
-        plan: plan ? JSON.stringify(plan.plan.meals) : "Sem plano gerado.",
+        diagnosis: clinicalContext || `Sinalizações: ${flags.join("; ")}\nHipóteses: ${hypotheses.join("; ")}`,
+        plan: plan ? `Cardápio estruturado:\n${JSON.stringify(plan.plan.meals)}\n\nJustificativa do plano:\n${plan.rationale}` : "Sem plano gerado.",
       } });
       await db.saveReport(id, report.report);
       await db.updateConsultation(id, { clinical_summary: summary.summary, status: "finalizada" });
       void queryClient.invalidateQueries({ queryKey: ["consultation", id] });
       if (onOpenReport) onOpenReport();
       else void navigate({ to: "/prontuario/$id", params: { id } });
-    }, "Parecer gerado.");
+    }, "Parecer gerado com o raciocínio clínico validado.");
   };
 
   const completed = [
