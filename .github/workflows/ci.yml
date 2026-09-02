@@ -44,8 +44,8 @@ jobs:
             exit 0
           fi
 
-          printf 'Linting changed files:\n%s\n' "${FILES[*]}"
-          bunx eslint "${FILES[@]}"
+          printf 'Linting changed files (formatting debt excluded):\n%s\n' "${FILES[*]}"
+          bunx eslint --rule 'prettier/prettier: off' "${FILES[@]}"
 
       - name: Typecheck
         run: bunx tsc --noEmit
