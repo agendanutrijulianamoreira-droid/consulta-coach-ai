@@ -14,6 +14,8 @@ import { FoodRecallPanel } from "@/modules/consulta/ui/recall-panel";
 import { EnergyPanel } from "@/modules/avaliacao/ui/energy-panel";
 import { analyzeAnthropometry, ageFromBirthDate, biologicalSex, type AnthroData, type SkinfoldFormula } from "@/modules/avaliacao/domain/anthropometry";
 import { DEFAULT_ENERGY, calculateEnergy, type EnergyInputs } from "@/modules/avaliacao/domain/energy";
+import { LabAssessmentPanel } from "@/modules/exames/ui/lab-assessment-panel";
+import * as labDb from "@/modules/exames/infrastructure/labs-repository";
 import { buildMealPlan, defaultMacros, recalculatePlan, scaleItem } from "@/modules/plano/domain/meal-plan-engine";
 import { blobToBase64, startRecording, type AudioRecorder } from "@/modules/transcricao/recorder";
 import { countPendingAudioWindows, listPendingAudioWindows, markPendingAudioAttempt, removePendingAudioWindow, savePendingAudioWindow, type PendingAudioWindow } from "@/modules/transcricao/pending-queue";
@@ -23,21 +25,22 @@ import { MEAL_SLOT_LABELS, RESTRICTION_OPTIONS, type AnamnesisFields, type Food,
 
 export const Route = createFileRoute("/consulta/$id")({
   head: () => ({ meta: [
-    { title: "Consulta clínica — Cach AI" }, { name: "description", content: "Consulta clínica com transcrição, avaliação completa, cálculos energéticos e cardápio." },
-    { property: "og:title", content: "Consulta clínica — Cach AI" }, { property: "og:description", content: "Consulta clínica com transcrição, avaliação completa, cálculos energéticos e cardápio." },
+    { title: "Consulta clínica — Cach AI" }, { name: "description", content: "Consulta clínica com transcrição, avaliação completa, exames, cálculos energéticos e cardápio." },
+    { property: "og:title", content: "Consulta clínica — Cach AI" }, { property: "og:description", content: "Consulta clínica com avaliação longitudinal e exames laboratoriais." },
     { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" },
   ] }), component: ConsultationPage,
 });
 
-const STEPS = ["Consulta", "Anamnese", "Antropometria", "Cálculos", "Recordatório", "Diagnóstico", "Cardápio"] as const;
+const STEPS = ["Consulta", "Anamnese", "Antropometria", "Cálculos", "Recordatório", "Exames", "Diagnóstico", "Cardápio"] as const;
 const HINTS: Record<number, string> = {
   0: "Capture a conversa com salvamento local e sincronização automática.",
   1: "Organize, revise e valide a anamnese clínica sem perder o que já foi conferido.",
   2: "Preencha as medidas: os resultados analíticos são calculados na hora.",
   3: "Escolha a fórmula e ajuste os fatores — manutenção e prescrição ficam separadas.",
   4: "Organize o dia alimentar pela conversa, por voz ou manualmente e confira as lacunas do relato.",
-  5: "A hipótese considera toda a consulta e depende da sua validação.",
-  6: "O cardápio já vem montado com os dados anteriores — edite e gere o parecer.",
+  5: "Digite, dite ou importe exames; revise a extração e acompanhe cada marcador entre consultas.",
+  6: "A hipótese considera toda a consulta, inclusive exames confirmados, e depende da sua validação.",
+  7: "O cardápio já vem montado com os dados anteriores — edite e gere o parecer.",
 };
 
 function ConsultationPage() {
@@ -60,12 +63,14 @@ function ConsultationPage() {
   const consultation = useQuery({ queryKey: ["consultation", id], queryFn: () => db.getConsultation(id) });
   const segments = useQuery({ queryKey: ["segments", id], queryFn: () => db.listSegments(id), refetchInterval: recording ? 4000 : false });
   const foods = useQuery({ queryKey: ["foods"], queryFn: db.listFoods });
+  const labResults = useQuery({ queryKey: ["lab-results", id], queryFn: () => labDb.listLabResults(id) });
   const [anamnesis, setAnamnesis] = useState<AnamnesisFields>({});
   const [anthro, setAnthro] = useState<AnthroData>({});
   const [formula, setFormula] = useState<SkinfoldFormula>("pollock3");
   const [interpretation, setInterpretation] = useState("");
   const [energy, setEnergy] = useState<EnergyInputs>(DEFAULT_ENERGY);
   const [recall, setRecall] = useState<RecallItem[]>([]);
+  const [labCount, setLabCount] = useState(0);
   const [hypotheses, setHypotheses] = useState<string[]>([]);
   const [flags, setFlags] = useState<string[]>([]);
   const [conduct, setConduct] = useState<db.ConductRow>({ phase: "adaptacao", kcal: 2000, protein_g: null, carb_g: null, fat_g: null, meals_count: 5, goal: "emagrecimento", preferences: [], restrictions: [], notes: "" });
@@ -77,6 +82,11 @@ function ConsultationPage() {
   const profile = useMemo(() => ({ age: ageFromBirthDate(patient?.birth_date), sex: patient?.sex ?? null }), [patient?.birth_date, patient?.sex]);
   const analysis = useMemo(() => analyzeAnthropometry(anthro, profile, formula), [anthro, profile, formula]);
   const energyResult = useMemo(() => calculateEnergy(energy), [energy]);
+  const labContext = useMemo(() => ({
+    age: profile.age,
+    sex: biologicalSex(profile.sex),
+    weightKg: Number(String(anthro["peso"] ?? "").replace(",", ".")) || null,
+  }), [anthro, profile.age, profile.sex]);
 
   useEffect(() => {
     void (async () => {
@@ -108,7 +118,7 @@ function ConsultationPage() {
   }, [step, anthro, profile, analysis.leanMass]);
 
   useEffect(() => {
-    if (step !== 6 || plan || !loaded || !(foods.data?.length) || busy) return;
+    if (step !== 7 || plan || !loaded || !(foods.data?.length) || busy) return;
     void generatePlan(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, plan, loaded, foods.data, busy]);
@@ -121,6 +131,10 @@ function ConsultationPage() {
   const anamnesisText = Object.entries(anamnesis).filter(([, field]) => field?.value && field.status !== "recusado").map(([key, field]) => `${key}: ${field?.value}`).join("\n");
   const analysisText = analysis.groups.map((group) => `${group.title}\n${group.results.map((r) => `- ${r.label}: ${r.value}${r.detail ? ` (${r.detail})` : ""}`).join("\n")}`).join("\n\n");
   const energyText = `Equação: ${energy.formula} | TMB/GER: ${energyResult.bmr ?? "—"} kcal | Manutenção: ${energyResult.maintenanceKcal ?? "—"} kcal | Ajuste clínico: ${energy.manualAdjust} kcal | Meta prescrita: ${energyResult.targetKcal ?? "—"} kcal | Exercício MET líquido: ${energyResult.metKcal} kcal | Gestação/lactação: ${energyResult.pregnancyKcal} kcal`;
+  const labText = (labResults.data ?? [])
+    .filter((item) => item.review_status === "confirmed" && item.value !== null)
+    .map((item) => `${item.analyte_name}: ${item.value} ${item.unit ?? ""}${item.is_derived ? ` [calculado: ${item.calculation_version ?? item.calculation_key ?? "índice derivado"}]` : " [medido]"}`)
+    .join("\n");
 
   useEffect(() => { transcriptRef.current = transcriptText; }, [transcriptText]);
 
@@ -134,9 +148,7 @@ function ConsultationPage() {
     try {
       await markPendingAudioAttempt(windowItem.id);
       const result = await transcribe({ data: { audioBase64: await blobToBase64(windowItem.audio), context: transcriptRef.current.slice(-1500) } });
-      if (result.segments.length) {
-        await db.insertSegments(id, result.segments.map((segment, index) => ({ ...segment, offset_seconds: windowItem.offsetSeconds, client_id: `${windowItem.id}-${index}` })));
-      }
+      if (result.segments.length) await db.insertSegments(id, result.segments.map((segment, index) => ({ ...segment, offset_seconds: windowItem.offsetSeconds, client_id: `${windowItem.id}-${index}` })));
       await removePendingAudioWindow(windowItem.id);
       await queryClient.invalidateQueries({ queryKey: ["segments", id] });
       return true;
@@ -149,11 +161,7 @@ function ConsultationPage() {
     syncingRef.current = true;
     try {
       const pending = await listPendingAudioWindows(id);
-      for (const item of pending) {
-        if (!navigator.onLine) break;
-        const completed = await processPendingWindow(item);
-        if (!completed) break;
-      }
+      for (const item of pending) { if (!navigator.onLine) break; const completed = await processPendingWindow(item); if (!completed) break; }
     } finally { syncingRef.current = false; await refreshPendingCount(); }
   }, [id, processPendingWindow, refreshPendingCount]);
 
@@ -162,8 +170,7 @@ function ConsultationPage() {
     void refreshPendingCount().then(() => syncPending());
     const handleOnline = () => { setOnline(true); void syncPending(); };
     const handleOffline = () => setOnline(false);
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline); window.addEventListener("offline", handleOffline);
     return () => { window.removeEventListener("online", handleOnline); window.removeEventListener("offline", handleOffline); };
   }, [refreshPendingCount, syncPending]);
 
@@ -177,9 +184,7 @@ function ConsultationPage() {
 
   const handleWindow = useCallback(async (wav: Blob, offset: number) => {
     const item: PendingAudioWindow = { id: crypto.randomUUID(), consultationId: id, offsetSeconds: offset, createdAt: Date.now(), attempts: 0, audio: wav };
-    await savePendingAudioWindow(item);
-    await refreshPendingCount();
-    if (navigator.onLine) await processPendingWindow(item);
+    await savePendingAudioWindow(item); await refreshPendingCount(); if (navigator.onLine) await processPendingWindow(item);
   }, [id, processPendingWindow, refreshPendingCount]);
 
   const toggleRecording = async () => {
@@ -188,18 +193,14 @@ function ConsultationPage() {
     try {
       if (recording) {
         setFinalizingAudio(true);
-        try { await recorder.current?.stop(); }
-        finally { recorder.current = null; setRecording(false); }
-        await refreshPendingCount();
-        if (navigator.onLine) await syncPending();
+        try { await recorder.current?.stop(); } finally { recorder.current = null; setRecording(false); }
+        await refreshPendingCount(); if (navigator.onLine) await syncPending();
         await db.updateConsultation(id, { status: "gravada", duration_seconds: secondsRef.current, ended_at: new Date().toISOString() });
         await queryClient.invalidateQueries({ queryKey: ["consultation", id] });
-        toast.success("Gravação encerrada e áudio preservado.");
-        return;
+        toast.success("Gravação encerrada e áudio preservado."); return;
       }
       if (!navigator.mediaDevices?.getUserMedia) { toast.error("Este navegador não disponibiliza acesso ao microfone. Use uma versão atualizada do Chrome, Edge ou Safari."); return; }
-      recorder.current = await startRecording(handleWindow, 12000, secondsRef.current);
-      setRecording(true);
+      recorder.current = await startRecording(handleWindow, 12000, secondsRef.current); setRecording(true);
       await db.updateConsultation(id, { status: "em_andamento", started_at: consultation.data?.started_at ?? new Date().toISOString(), ended_at: null });
       await queryClient.invalidateQueries({ queryKey: ["consultation", id] });
     } catch (error) {
@@ -211,10 +212,7 @@ function ConsultationPage() {
   };
 
   const run = async (label: string, action: () => Promise<void>, message = "Alterações salvas.") => {
-    setBusy(label);
-    try { await action(); toast.success(message); }
-    catch (error) { toast.error((error as Error).message); }
-    finally { setBusy(null); }
+    setBusy(label); try { await action(); toast.success(message); } catch (error) { toast.error((error as Error).message); } finally { setBusy(null); }
   };
 
   const generatePlan = async (notify = true) => {
@@ -223,30 +221,40 @@ function ConsultationPage() {
       const macros = defaultMacros(targetKcal);
       const nextConduct: db.ConductRow = { ...conduct, kcal: targetKcal, energy: energy as unknown as Record<string, unknown> };
       const generated = buildMealPlan({ phase: nextConduct.phase, kcal: targetKcal, protein_g: nextConduct.protein_g ?? macros.protein_g, carb_g: nextConduct.carb_g ?? macros.carb_g, fat_g: nextConduct.fat_g ?? macros.fat_g, meals_count: nextConduct.meals_count, goal: nextConduct.goal, preferences: nextConduct.preferences, restrictions: nextConduct.restrictions }, foods.data ?? []);
-      const { rationale } = await describeMealPlan({ data: { plan: JSON.stringify(generated.meals), context: `${anamnesisText}\n${analysisText}\n${energyText}\nObjetivo: ${nextConduct.goal ?? ""}\nFase: ${nextConduct.phase ?? ""}` } });
-      setConduct(nextConduct); setPlan({ plan: generated, rationale });
-      await db.saveConduct(id, nextConduct); await db.saveMealPlan(id, generated, rationale);
+      const { rationale } = await describeMealPlan({ data: { plan: JSON.stringify(generated.meals), context: `${anamnesisText}\n${analysisText}\n${energyText}\nExames:\n${labText || "Sem exames confirmados"}\nObjetivo: ${nextConduct.goal ?? ""}\nFase: ${nextConduct.phase ?? ""}` } });
+      setConduct(nextConduct); setPlan({ plan: generated, rationale }); await db.saveConduct(id, nextConduct); await db.saveMealPlan(id, generated, rationale);
     }, notify ? "Cardápio gerado." : "Cardápio pré-carregado.");
   };
 
   const updatePlan = (next: MealPlan) => setPlan((current) => (current ? { ...current, plan: next } : current));
-  const savePlan = async () => {
-    if (!plan) return;
-    await run("salvar-plano", async () => { await db.saveConduct(id, { ...conduct, energy: energy as unknown as Record<string, unknown> }); await db.saveMealPlan(id, plan.plan, plan.rationale); });
-  };
+  const savePlan = async () => { if (!plan) return; await run("salvar-plano", async () => { await db.saveConduct(id, { ...conduct, energy: energy as unknown as Record<string, unknown> }); await db.saveMealPlan(id, plan.plan, plan.rationale); }); };
 
   const finish = async () => {
     await run("parecer", async () => {
       const summary = await generateClinicalSummary({ data: { transcript: transcriptText, anamnesis: anamnesisText } });
-      const report = await generateReport({ data: { patient: `${patient?.name ?? ""} | ${profile.age ?? "?"} anos | ${patient?.sex ?? "não informado"}`, anamnesis: anamnesisText, anthropometry: analysisText, energy: energyText, diagnosis: `Sinalizações: ${flags.join("; ")}\nHipóteses: ${hypotheses.join("; ")}`, plan: plan ? JSON.stringify(plan.plan.meals) : "Sem plano gerado." } });
-      await db.saveReport(id, report.report);
-      await db.updateConsultation(id, { clinical_summary: summary.summary, status: "finalizada" });
-      void queryClient.invalidateQueries({ queryKey: ["consultation", id] });
-      void navigate({ to: "/prontuario/$id", params: { id } });
+      const report = await generateReport({ data: {
+        patient: `${patient?.name ?? ""} | ${profile.age ?? "?"} anos | ${patient?.sex ?? "não informado"}`,
+        anamnesis: anamnesisText,
+        anthropometry: `${analysisText}\n\nExames laboratoriais confirmados:\n${labText || "Sem exames confirmados nesta consulta."}`,
+        energy: energyText,
+        diagnosis: `Sinalizações: ${flags.join("; ")}\nHipóteses: ${hypotheses.join("; ")}`,
+        plan: plan ? JSON.stringify(plan.plan.meals) : "Sem plano gerado.",
+      } });
+      await db.saveReport(id, report.report); await db.updateConsultation(id, { clinical_summary: summary.summary, status: "finalizada" });
+      void queryClient.invalidateQueries({ queryKey: ["consultation", id] }); void navigate({ to: "/prontuario/$id", params: { id } });
     }, "Parecer gerado.");
   };
 
-  const completed = [Boolean(segments.data?.length), Object.values(anamnesis).some((field) => field?.value && field.status !== "recusado"), Object.values(anthro).some(Boolean), Boolean(energyResult.targetKcal ?? energyResult.maintenanceKcal), recall.some((item) => Boolean(item.foods?.trim())), hypotheses.length > 0 || flags.length > 0, Boolean(plan)];
+  const completed = [
+    Boolean(segments.data?.length),
+    Object.values(anamnesis).some((field) => field?.value && field.status !== "recusado"),
+    Object.values(anthro).some(Boolean),
+    Boolean(energyResult.targetKcal ?? energyResult.maintenanceKcal),
+    recall.some((item) => Boolean(item.foods?.trim())),
+    labCount > 0,
+    hypotheses.length > 0 || flags.length > 0,
+    Boolean(plan),
+  ];
   const goNext = () => setStep((value) => Math.min(STEPS.length - 1, value + 1));
   const goPrevious = () => setStep((value) => Math.max(0, value - 1));
   const operationalStatus = finalizingAudio ? "Finalizando áudio…" : recording ? "Gravando" : processingCount > 0 ? "Processando transcrição…" : pendingCount > 0 ? `${pendingCount} trecho${pendingCount === 1 ? "" : "s"} aguardando sincronização` : "Tudo sincronizado";
@@ -263,16 +271,12 @@ function ConsultationPage() {
       {step === 0 ? <section className="grid gap-6 lg:grid-cols-[1fr_300px]"><div className="min-h-[360px] rounded-md border border-border"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3"><div><h2 className="text-sm font-medium">Transcrição da consulta</h2><p className="mt-0.5 text-xs text-muted-foreground">Cada trecho é preservado localmente antes de ser enviado para transcrição.</p></div><span className="text-xs tabular-nums text-muted-foreground">{segments.data?.length ?? 0} falas</span></div><div className="max-h-[560px] space-y-3 overflow-y-auto p-4" aria-live="polite">{(segments.data ?? []).map((segment) => <p key={segment.id} className="text-sm leading-6"><span className={segment.speaker === "nutricionista" ? "font-medium text-primary" : "font-medium text-muted-foreground"}>{segment.speaker === "nutricionista" ? "Nutricionista" : "Paciente"}:</span>{" "}{segment.content}</p>)}{!segments.data?.length ? <div className="flex min-h-64 flex-col items-center justify-center text-center"><Mic className="size-6 text-muted-foreground" /><p className="mt-3 text-sm text-muted-foreground">Inicie a consulta para capturar a primeira fala.</p><p className="mt-1 max-w-sm text-xs leading-5 text-muted-foreground">Se a conexão cair, o Cach AI continua preservando as janelas de áudio neste dispositivo e tenta sincronizar quando a internet voltar.</p></div> : null}</div></div><aside className="space-y-3"><div className="rounded-md border border-border p-4"><div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2 text-sm font-medium">{online ? <Cloud /> : <CloudOff />}{online ? "Conectado" : "Sem internet"}</div>{processingCount > 0 ? <LoaderCircle className="size-4 animate-spin text-muted-foreground" /> : null}</div><div className="mt-3 space-y-1.5 text-xs leading-5 text-muted-foreground"><p>{recording ? "Microfone ativo e gravação em andamento." : finalizingAudio ? "Aguardando o último trecho ser preservado." : "Gravação parada."}</p><p>{pendingCount > 0 ? `${pendingCount} trecho${pendingCount === 1 ? "" : "s"} salvo${pendingCount === 1 ? "" : "s"} localmente aguardando sincronização.` : "Tudo sincronizado com o prontuário."}</p></div>{pendingCount > 0 && online ? <Button type="button" variant="outline" size="sm" className="mt-3 w-full" disabled={processingCount > 0} onClick={() => void syncPending()}><RefreshCw /> Tentar sincronizar agora</Button> : null}</div><InfoCard icon={<Sparkles />} title="Revisão assistida" text="Use a transcrição para extrair a anamnese e revisar os dados antes de avançar." /><InfoCard icon={<FileText />} title="Proteção contra perda" text="O encerramento só conclui depois que a última janela de áudio foi preservada e a fila de captura terminou." /></aside></section> : null}
 
       {step === 1 ? <AnamnesisPanel fields={anamnesis} onChange={setAnamnesis} /> : null}
-
       {step === 2 ? <div className="space-y-4"><AnthropometryPanel data={anthro} interpretation={interpretation} profile={profile} formula={formula} onFormulaChange={setFormula} onChange={setAnthro} /><ActionBar busy={busy === "antro"} disabled={busy !== null} label="Interpretar e salvar avaliação" icon={<Sparkles />} onAction={() => void run("antro", async () => { const result = await interpretAnthropometry({ data: { data: `${JSON.stringify(anthro)}\n\n${analysisText}` } }); setInterpretation(result.interpretation); await db.saveAnthropometry(id, { ...anthro, formula }, result.interpretation); })} secondary={<Button size="sm" variant="outline" onClick={() => void run("save-antro", async () => db.saveAnthropometry(id, { ...anthro, formula }, interpretation))}><Save /> Salvar medidas</Button>} /></div> : null}
-
       {step === 3 ? <div className="space-y-4"><EnergyPanel value={energy} onChange={setEnergy} /><ActionBar busy={busy === "energia"} disabled={busy !== null} label="Salvar cálculos" icon={<Save />} onAction={() => void run("energia", async () => db.saveConduct(id, { ...conduct, kcal: energyResult.targetKcal ?? energyResult.maintenanceKcal ?? conduct.kcal, energy: energy as unknown as Record<string, unknown> }))} /></div> : null}
-
       {step === 4 ? <FoodRecallPanel consultationId={id} items={recall} transcript={transcriptText} onChange={setRecall} /> : null}
-
-      {step === 5 ? <div className="space-y-4"><ActionBar busy={busy === "diag"} disabled={busy !== null} label="Analisar consulta completa" icon={<Sparkles />} onAction={() => void run("diag", async () => { const result = await analyzeConsultation({ data: { anamnesis: `${anamnesisText}\n\nTranscrição:\n${transcriptText.slice(-8000)}`, anthropometry: `${analysisText}\n\n${energyText}`, recall: JSON.stringify(recall) } }); setFlags(result.flags); setHypotheses(result.hypotheses); await db.saveDiagnoses(id, result.hypotheses, result.flags); })} /><DiagnosisPanel hypotheses={hypotheses} flags={flags} onChange={(next) => { setHypotheses(next); void db.saveDiagnoses(id, next, flags); }} /></div> : null}
-
-      {step === 6 ? <MenuStep conduct={conduct} setConduct={setConduct} busy={busy} foods={foods.data ?? []} plan={plan} targetKcal={energyResult.targetKcal ?? energyResult.tee} onGenerate={() => void generatePlan()} onUpdatePlan={updatePlan} onSave={() => void savePlan()} onFinish={() => void finish()} /> : null}
+      {step === 5 && patient ? <LabAssessmentPanel consultationId={id} patientId={patient.id} context={labContext} onCountChange={setLabCount} /> : null}
+      {step === 6 ? <div className="space-y-4"><ActionBar busy={busy === "diag"} disabled={busy !== null} label="Analisar consulta completa" icon={<Sparkles />} onAction={() => void run("diag", async () => { const result = await analyzeConsultation({ data: { anamnesis: `${anamnesisText}\n\nTranscrição:\n${transcriptText.slice(-8000)}\n\nExames confirmados:\n${labText || "Sem exames confirmados"}`, anthropometry: `${analysisText}\n\n${energyText}`, recall: JSON.stringify(recall) } }); setFlags(result.flags); setHypotheses(result.hypotheses); await db.saveDiagnoses(id, result.hypotheses, result.flags); })} /><DiagnosisPanel hypotheses={hypotheses} flags={flags} onChange={(next) => { setHypotheses(next); void db.saveDiagnoses(id, next, flags); }} /></div> : null}
+      {step === 7 ? <MenuStep conduct={conduct} setConduct={setConduct} busy={busy} foods={foods.data ?? []} plan={plan} targetKcal={energyResult.targetKcal ?? energyResult.tee} onGenerate={() => void generatePlan()} onUpdatePlan={updatePlan} onSave={() => void savePlan()} onFinish={() => void finish()} /> : null}
 
       <div className="mt-8 flex items-center justify-between border-t border-border pt-4"><Button variant="ghost" size="sm" onClick={goPrevious} disabled={step === 0}><ArrowLeft /> Anterior</Button>{step < STEPS.length - 1 ? <Button size="sm" onClick={goNext} disabled={finalizingAudio}>Próxima etapa <ArrowRight /></Button> : <Link to="/prontuario/$id" params={{ id }}><Button size="sm" variant="secondary"><FileText /> Abrir parecer</Button></Link>}</div>
     </main>
