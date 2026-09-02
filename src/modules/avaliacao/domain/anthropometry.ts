@@ -371,8 +371,8 @@ export function bodyFatByFormula(data: AnthroData, profile: PatientProfile, form
 export interface AnthroResult {
   label: string;
   value: string;
-  detail?: string;
-  source?: "measured" | "derived" | "calculated";
+  detail?: string | undefined;
+  source?: "measured" | "derived" | "calculated" | undefined;
 }
 
 export interface AnthroAnalysis {
