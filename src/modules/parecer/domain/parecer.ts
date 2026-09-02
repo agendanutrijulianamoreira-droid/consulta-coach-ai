@@ -9,6 +9,7 @@ import {
   visceralFatClass,
   whrRiskClass,
   type AnthroData,
+  type SkinfoldFormula,
 } from "@/modules/avaliacao/domain/anthropometry";
 
 export interface ParecerPatient {
@@ -132,7 +133,8 @@ export function buildParecerMetrics(data: AnthroData, patient: ParecerPatient): 
   const visceral = num(data["bia_visceral"]);
   const metabolicAge = num(data["bia_idade_metabolica"]);
 
-  const anthro = analyzeAnthropometry({ ...data, composition_method: "skinfolds" }, { age, sex: patient.sex }, (data["formula"] as any) || "pollock3");
+  const formula = (data["formula"] as SkinfoldFormula | undefined) ?? "pollock3";
+  const anthro = analyzeAnthropometry({ ...data, composition_method: "skinfolds" }, { age, sex: patient.sex }, formula);
   const biaBone = num(data["bia_peso_osseo"]);
   const boneWeight = biaBone ?? anthro.boneMass;
   const boneWeightSource = biaBone !== null ? "bioimpedance" : anthro.boneMass !== null ? "diameters" : null;
@@ -223,10 +225,11 @@ export function compositionGauges(m: ParecerMetrics): ParecerGauge[] {
 }
 
 export function metricsToPrompt(m: ParecerMetrics, patient: ParecerPatient) {
+  const sex = biologicalSex(patient.sex);
   return [
     `Paciente: ${patient.name}`,
     `Idade: ${patient.age ?? "não informada"}`,
-    `Sexo biológico: ${biologicalSex(patient.sex) === "male" ? "masculino" : biologicalSex(patient.sex) === "female" ? "feminino" : "não informado"}`,
+    `Sexo biológico: ${sex === "male" ? "masculino" : sex === "female" ? "feminino" : "não informado"}`,
     `Fase: ${patient.phase}`,
     `Peso: ${n(m.weight, "kg")}${m.weightEstimated ? " (ESTIMADO por Chumlea; não aferido)" : ""} · Altura: ${n(m.height, "cm", 0)} · IMC: ${n(m.bmi, "")} (${m.bmiClass ?? "—"})`,
     `Cintura: ${n(m.waist, "cm", 0)} · Abdômen: ${n(m.abdomen, "cm", 0)} · Quadril: ${n(m.hip, "cm", 0)} · RCQ: ${m.whr ?? "—"} (${m.whrClass ?? "—"})`,
