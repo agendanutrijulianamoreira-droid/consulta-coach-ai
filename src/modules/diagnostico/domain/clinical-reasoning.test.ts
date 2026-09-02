@@ -31,7 +31,7 @@ describe("clinical reasoning merge", () => {
       directions: [{ id: "d1", title: "Regularidade alimentar", rationale: "Mantido clinicamente", status: "accepted" }],
     };
     const merged = mergeClinicalReasoning(current, EMPTY_REASONING);
-    expect(merged.directions).toHaveLength(1);
+    expect(merged.directions.length).toBe(1);
     expect(merged.directions[0]?.title).toBe("Regularidade alimentar");
   });
 });
