@@ -1,6 +1,11 @@
+import { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useParams } from "@tanstack/react-router";
 import { AlertTriangle, Check, Equal, Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import * as db from "@/lib/nutrios/repository";
+import { biologicalSex } from "@/modules/avaliacao/domain/anthropometry";
 import {
   ACTIVITY_FACTORS,
   EER_ACTIVITY_OPTIONS,
@@ -10,17 +15,23 @@ import {
   calculateEnergy,
   type EerActivity,
   type EnergyInputs,
-  type EnergySex,
-  type ExerciseMode,
 } from "@/modules/avaliacao/domain/energy";
 
 export function EnergyPanel({ value, onChange }: { value: EnergyInputs; onChange: (next: EnergyInputs) => void }) {
+  const { id } = useParams({ from: "/consulta/$id" });
+  const consultation = useQuery({ queryKey: ["consultation", id], queryFn: () => db.getConsultation(id) });
+  const patientSex = biologicalSex(consultation.data?.patients?.sex ?? null);
   const result = calculateEnergy(value);
   const set = (patch: Partial<EnergyInputs>) => onChange({ ...value, ...patch });
   const estimates = [...result.estimates, result.eer];
   const selectedFormula = ENERGY_FORMULAS.find((item) => item.value === value.formula);
   const selectedEstimate = estimates.find((item) => item.key === value.formula);
   const isEer = value.formula === "eer";
+
+  useEffect(() => {
+    if (value.sex !== null || patientSex === null) return;
+    onChange({ ...value, sex: patientSex });
+  }, [onChange, patientSex, value]);
 
   return (
     <div className="space-y-5">
@@ -49,17 +60,16 @@ export function EnergyPanel({ value, onChange }: { value: EnergyInputs; onChange
             <ChoiceButton active={value.sex === "male"} onClick={() => set({ sex: "male" })}>Masculino</ChoiceButton>
             <ChoiceButton active={value.sex === null} onClick={() => set({ sex: null })}>Não informado</ChoiceButton>
           </div>
+          {patientSex !== null ? <p className="mt-2 text-[11px] text-muted-foreground">Pré-preenchido a partir do cadastro do paciente; pode ser confirmado ou corrigido para este cálculo.</p> : <p className="mt-2 text-[11px] text-muted-foreground">O cadastro não possui sexo biológico reconhecido. Fórmulas dependentes desse dado permanecem bloqueadas.</p>}
         </div>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
         <div className="space-y-5">
           <section>
-            <div className="mb-2 flex items-end justify-between gap-3">
-              <div>
-                <h3 className="text-sm font-medium">1. Escolha a equação</h3>
-                <p className="mt-0.5 text-xs text-muted-foreground">Compare os valores disponíveis; somente a fórmula marcada alimentará os próximos cálculos.</p>
-              </div>
+            <div className="mb-2">
+              <h3 className="text-sm font-medium">1. Escolha a equação</h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">Compare os valores disponíveis; somente a fórmula marcada alimentará os próximos cálculos.</p>
             </div>
             <div className="space-y-1.5">
               {estimates.map((estimate) => {
@@ -159,7 +169,7 @@ export function EnergyPanel({ value, onChange }: { value: EnergyInputs; onChange
 
           <div className="space-y-1">
             <Row label={isEer ? "EER selecionada" : "TMB/GER selecionada"} value={selectedEstimate?.kcal !== null && selectedEstimate?.kcal !== undefined ? `${selectedEstimate.kcal} kcal` : "—"} />
-            <Row label="Atividade" value={isEer ? EER_ACTIVITY_OPTIONS.find((item) => item.value === value.eerActivity)?.label ?? "—" : value.exerciseMode === "activity_factor" ? `× ${value.activityFactor.toLocaleString("pt-BR")}` : `base 1,20 + MET`} />
+            <Row label="Atividade" value={isEer ? EER_ACTIVITY_OPTIONS.find((item) => item.value === value.eerActivity)?.label ?? "—" : value.exerciseMode === "activity_factor" ? `× ${value.activityFactor.toLocaleString("pt-BR")}` : "base 1,20 + MET"} />
             {!isEer && value.exerciseMode === "met" ? <Row label="Exercício líquido" value={result.metKcal ? `+ ${result.metKcal} kcal` : "—"} /> : null}
             <Row label="Estresse / injúria" value={value.injuryFactor === 1 ? "não aplicado" : `× ${value.injuryFactor.toLocaleString("pt-BR")}`} />
             <Row label="Gestação / lactação" value={result.pregnancyKcal ? `+ ${result.pregnancyKcal} kcal` : "—"} />
@@ -168,9 +178,7 @@ export function EnergyPanel({ value, onChange }: { value: EnergyInputs; onChange
 
           {result.issues.length ? (
             <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
-              {result.issues.map((issue, index) => (
-                <p key={`${issue.message}-${index}`} className={`flex gap-2 text-xs leading-5 ${issue.severity === "error" ? "text-destructive" : "text-muted-foreground"}`}><AlertTriangle className="mt-0.5 size-3.5 shrink-0" />{issue.message}</p>
-              ))}
+              {result.issues.map((issue, index) => <p key={`${issue.message}-${index}`} className={`flex gap-2 text-xs leading-5 ${issue.severity === "error" ? "text-destructive" : "text-muted-foreground"}`}><AlertTriangle className="mt-0.5 size-3.5 shrink-0" />{issue.message}</p>)}
             </div>
           ) : (
             <div className="flex gap-2 rounded-md border border-border p-3 text-xs leading-5 text-muted-foreground"><Check className="mt-0.5 size-3.5 shrink-0" />Cálculo consistente com os dados e opções selecionados.</div>
