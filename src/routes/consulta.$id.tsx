@@ -6,18 +6,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/nutrios/app-shell";
 import { ConsultationTimer } from "@/components/nutrios/consultation-timer";
-import { DictationButton, DictationField } from "@/components/nutrios/dictation";
+import { DictationField } from "@/components/nutrios/dictation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { AnamnesisPanel, AnthropometryPanel, DiagnosisPanel, RecallPanel } from "@/modules/consulta/ui/panels";
+import { AnamnesisPanel, AnthropometryPanel, DiagnosisPanel } from "@/modules/consulta/ui/panels";
+import { FoodRecallPanel } from "@/modules/consulta/ui/recall-panel";
 import { EnergyPanel } from "@/modules/avaliacao/ui/energy-panel";
-import { analyzeAnthropometry, ageFromBirthDate, isMale, type AnthroData, type SkinfoldFormula } from "@/modules/avaliacao/domain/anthropometry";
+import { analyzeAnthropometry, ageFromBirthDate, biologicalSex, type AnthroData, type SkinfoldFormula } from "@/modules/avaliacao/domain/anthropometry";
 import { DEFAULT_ENERGY, calculateEnergy, type EnergyInputs } from "@/modules/avaliacao/domain/energy";
 import { buildMealPlan, defaultMacros, recalculatePlan, scaleItem } from "@/modules/plano/domain/meal-plan-engine";
 import { blobToBase64, startRecording, type AudioRecorder } from "@/modules/transcricao/recorder";
 import { countPendingAudioWindows, listPendingAudioWindows, markPendingAudioAttempt, removePendingAudioWindow, savePendingAudioWindow, type PendingAudioWindow } from "@/modules/transcricao/pending-queue";
 import * as db from "@/lib/nutrios/repository";
-import { analyzeConsultation, describeMealPlan, generateClinicalSummary, generateReport, interpretAnthropometry, structureRecall, transcribeChunk } from "@/lib/nutrios/ai.functions";
+import { analyzeConsultation, describeMealPlan, generateClinicalSummary, generateReport, interpretAnthropometry, transcribeChunk } from "@/lib/nutrios/ai.functions";
 import { MEAL_SLOT_LABELS, RESTRICTION_OPTIONS, type AnamnesisFields, type Food, type MealPlan, type RecallItem } from "@/lib/nutrios/types";
 
 export const Route = createFileRoute("/consulta/$id")({
@@ -33,8 +34,8 @@ const HINTS: Record<number, string> = {
   0: "Capture a conversa com salvamento local e sincronização automática.",
   1: "Organize, revise e valide a anamnese clínica sem perder o que já foi conferido.",
   2: "Preencha as medidas: os resultados analíticos são calculados na hora.",
-  3: "Escolha a fórmula e ajuste os fatores — o GET alimenta o cardápio.",
-  4: "Capte o recordatório por voz e edite as linhas enquanto conversam.",
+  3: "Escolha a fórmula e ajuste os fatores — manutenção e prescrição ficam separadas.",
+  4: "Organize o dia alimentar pela conversa, por voz ou manualmente e confira as lacunas do relato.",
   5: "A hipótese considera toda a consulta e depende da sua validação.",
   6: "O cardápio já vem montado com os dados anteriores — edite e gere o parecer.",
 };
@@ -95,13 +96,14 @@ function ConsultationPage() {
 
   useEffect(() => {
     if (step !== 3) return;
+    const sex = biologicalSex(profile.sex);
     setEnergy((current) => ({
       ...current,
       weight: current.weight ?? (Number(String(anthro["peso"] ?? "").replace(",", ".")) || null),
       height: current.height ?? (Number(String(anthro["altura"] ?? "").replace(",", ".")) || null),
       age: current.age ?? profile.age,
       leanMass: current.leanMass ?? analysis.leanMass,
-      male: current.male || isMale(profile.sex),
+      sex: current.sex ?? sex,
     }));
   }, [step, anthro, profile, analysis.leanMass]);
 
@@ -118,16 +120,13 @@ function ConsultationPage() {
   const transcriptText = (segments.data ?? []).map((segment) => `${segment.speaker === "nutricionista" ? "Nutricionista" : "Paciente"}: ${segment.content}`).join("\n");
   const anamnesisText = Object.entries(anamnesis).filter(([, field]) => field?.value && field.status !== "recusado").map(([key, field]) => `${key}: ${field?.value}`).join("\n");
   const analysisText = analysis.groups.map((group) => `${group.title}\n${group.results.map((r) => `- ${r.label}: ${r.value}${r.detail ? ` (${r.detail})` : ""}`).join("\n")}`).join("\n\n");
-  const energyText = `TMB (${energy.formula}): ${energyResult.bmr ?? "—"} kcal | Fator atividade: ${energy.activityFactor} | Fator injúria: ${energy.injuryFactor} | MET: ${energyResult.metKcal} kcal | Gestação/lactação: ${energyResult.pregnancyKcal} kcal | GET: ${energyResult.tee ?? "—"} kcal`;
+  const energyText = `Equação: ${energy.formula} | TMB/GER: ${energyResult.bmr ?? "—"} kcal | Manutenção: ${energyResult.maintenanceKcal ?? "—"} kcal | Ajuste clínico: ${energy.manualAdjust} kcal | Meta prescrita: ${energyResult.targetKcal ?? "—"} kcal | Exercício MET líquido: ${energyResult.metKcal} kcal | Gestação/lactação: ${energyResult.pregnancyKcal} kcal`;
 
   useEffect(() => { transcriptRef.current = transcriptText; }, [transcriptText]);
 
   const refreshPendingCount = useCallback(async () => {
-    try {
-      setPendingCount(await countPendingAudioWindows(id));
-    } catch {
-      setPendingCount(0);
-    }
+    try { setPendingCount(await countPendingAudioWindows(id)); }
+    catch { setPendingCount(0); }
   }, [id]);
 
   const processPendingWindow = useCallback(async (windowItem: PendingAudioWindow) => {
@@ -136,21 +135,13 @@ function ConsultationPage() {
       await markPendingAudioAttempt(windowItem.id);
       const result = await transcribe({ data: { audioBase64: await blobToBase64(windowItem.audio), context: transcriptRef.current.slice(-1500) } });
       if (result.segments.length) {
-        await db.insertSegments(id, result.segments.map((segment, index) => ({
-          ...segment,
-          offset_seconds: windowItem.offsetSeconds,
-          client_id: `${windowItem.id}-${index}`,
-        })));
+        await db.insertSegments(id, result.segments.map((segment, index) => ({ ...segment, offset_seconds: windowItem.offsetSeconds, client_id: `${windowItem.id}-${index}` })));
       }
       await removePendingAudioWindow(windowItem.id);
       await queryClient.invalidateQueries({ queryKey: ["segments", id] });
       return true;
-    } catch {
-      return false;
-    } finally {
-      setProcessingCount((value) => Math.max(0, value - 1));
-      void refreshPendingCount();
-    }
+    } catch { return false; }
+    finally { setProcessingCount((value) => Math.max(0, value - 1)); void refreshPendingCount(); }
   }, [id, queryClient, refreshPendingCount, transcribe]);
 
   const syncPending = useCallback(async () => {
@@ -163,10 +154,7 @@ function ConsultationPage() {
         const completed = await processPendingWindow(item);
         if (!completed) break;
       }
-    } finally {
-      syncingRef.current = false;
-      await refreshPendingCount();
-    }
+    } finally { syncingRef.current = false; await refreshPendingCount(); }
   }, [id, processPendingWindow, refreshPendingCount]);
 
   useEffect(() => {
@@ -176,32 +164,19 @@ function ConsultationPage() {
     const handleOffline = () => setOnline(false);
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
+    return () => { window.removeEventListener("online", handleOnline); window.removeEventListener("offline", handleOffline); };
   }, [refreshPendingCount, syncPending]);
 
   useEffect(() => {
     const shouldWarn = recording || finalizingAudio || pendingCount > 0;
     if (!shouldWarn) return;
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [recording, finalizingAudio, pendingCount]);
 
   const handleWindow = useCallback(async (wav: Blob, offset: number) => {
-    const item: PendingAudioWindow = {
-      id: crypto.randomUUID(),
-      consultationId: id,
-      offsetSeconds: offset,
-      createdAt: Date.now(),
-      attempts: 0,
-      audio: wav,
-    };
+    const item: PendingAudioWindow = { id: crypto.randomUUID(), consultationId: id, offsetSeconds: offset, createdAt: Date.now(), attempts: 0, audio: wav };
     await savePendingAudioWindow(item);
     await refreshPendingCount();
     if (navigator.onLine) await processPendingWindow(item);
@@ -213,12 +188,8 @@ function ConsultationPage() {
     try {
       if (recording) {
         setFinalizingAudio(true);
-        try {
-          await recorder.current?.stop();
-        } finally {
-          recorder.current = null;
-          setRecording(false);
-        }
+        try { await recorder.current?.stop(); }
+        finally { recorder.current = null; setRecording(false); }
         await refreshPendingCount();
         if (navigator.onLine) await syncPending();
         await db.updateConsultation(id, { status: "gravada", duration_seconds: secondsRef.current, ended_at: new Date().toISOString() });
@@ -226,29 +197,17 @@ function ConsultationPage() {
         toast.success("Gravação encerrada e áudio preservado.");
         return;
       }
-
-      if (!navigator.mediaDevices?.getUserMedia) {
-        toast.error("Este navegador não disponibiliza acesso ao microfone. Use uma versão atualizada do Chrome, Edge ou Safari.");
-        return;
-      }
-
+      if (!navigator.mediaDevices?.getUserMedia) { toast.error("Este navegador não disponibiliza acesso ao microfone. Use uma versão atualizada do Chrome, Edge ou Safari."); return; }
       recorder.current = await startRecording(handleWindow, 12000, secondsRef.current);
       setRecording(true);
       await db.updateConsultation(id, { status: "em_andamento", started_at: consultation.data?.started_at ?? new Date().toISOString(), ended_at: null });
       await queryClient.invalidateQueries({ queryKey: ["consultation", id] });
     } catch (error) {
       const name = error instanceof DOMException ? error.name : "";
-      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
-        toast.error("O acesso ao microfone foi bloqueado. Autorize o microfone para este site nas configurações do navegador e tente novamente.");
-      } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
-        toast.error("Nenhum microfone foi encontrado neste dispositivo.");
-      } else {
-        toast.error(error instanceof Error ? error.message : "Não foi possível iniciar ou encerrar a gravação.");
-      }
-    } finally {
-      setFinalizingAudio(false);
-      setRecordingBusy(false);
-    }
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") toast.error("O acesso ao microfone foi bloqueado. Autorize o microfone para este site nas configurações do navegador e tente novamente.");
+      else if (name === "NotFoundError" || name === "DevicesNotFoundError") toast.error("Nenhum microfone foi encontrado neste dispositivo.");
+      else toast.error(error instanceof Error ? error.message : "Não foi possível iniciar ou encerrar a gravação.");
+    } finally { setFinalizingAudio(false); setRecordingBusy(false); }
   };
 
   const run = async (label: string, action: () => Promise<void>, message = "Alterações salvas.") => {
@@ -258,44 +217,28 @@ function ConsultationPage() {
     finally { setBusy(null); }
   };
 
-  /** Monta o cardápio pelo motor de regras usando o GET e o que foi revisado. */
   const generatePlan = async (notify = true) => {
-    const targetKcal = energyResult.tee ?? conduct.kcal ?? 2000;
+    const targetKcal = energyResult.targetKcal ?? energyResult.tee ?? conduct.kcal ?? 2000;
     await run("plano", async () => {
       const macros = defaultMacros(targetKcal);
       const nextConduct: db.ConductRow = { ...conduct, kcal: targetKcal, energy: energy as unknown as Record<string, unknown> };
       const generated = buildMealPlan({ phase: nextConduct.phase, kcal: targetKcal, protein_g: nextConduct.protein_g ?? macros.protein_g, carb_g: nextConduct.carb_g ?? macros.carb_g, fat_g: nextConduct.fat_g ?? macros.fat_g, meals_count: nextConduct.meals_count, goal: nextConduct.goal, preferences: nextConduct.preferences, restrictions: nextConduct.restrictions }, foods.data ?? []);
       const { rationale } = await describeMealPlan({ data: { plan: JSON.stringify(generated.meals), context: `${anamnesisText}\n${analysisText}\n${energyText}\nObjetivo: ${nextConduct.goal ?? ""}\nFase: ${nextConduct.phase ?? ""}` } });
-      setConduct(nextConduct);
-      setPlan({ plan: generated, rationale });
-      await db.saveConduct(id, nextConduct);
-      await db.saveMealPlan(id, generated, rationale);
+      setConduct(nextConduct); setPlan({ plan: generated, rationale });
+      await db.saveConduct(id, nextConduct); await db.saveMealPlan(id, generated, rationale);
     }, notify ? "Cardápio gerado." : "Cardápio pré-carregado.");
   };
 
-  const updatePlan = (next: MealPlan) => {
-    setPlan((current) => (current ? { ...current, plan: next } : current));
-  };
+  const updatePlan = (next: MealPlan) => setPlan((current) => (current ? { ...current, plan: next } : current));
   const savePlan = async () => {
     if (!plan) return;
-    await run("salvar-plano", async () => {
-      await db.saveConduct(id, { ...conduct, energy: energy as unknown as Record<string, unknown> });
-      await db.saveMealPlan(id, plan.plan, plan.rationale);
-    });
+    await run("salvar-plano", async () => { await db.saveConduct(id, { ...conduct, energy: energy as unknown as Record<string, unknown> }); await db.saveMealPlan(id, plan.plan, plan.rationale); });
   };
 
-  /** Fecha a consulta: resumo clínico + parecer completo para o paciente. */
   const finish = async () => {
     await run("parecer", async () => {
       const summary = await generateClinicalSummary({ data: { transcript: transcriptText, anamnesis: anamnesisText } });
-      const report = await generateReport({ data: {
-        patient: `${patient?.name ?? ""} | ${profile.age ?? "?"} anos | ${patient?.sex ?? "não informado"}`,
-        anamnesis: anamnesisText,
-        anthropometry: analysisText,
-        energy: energyText,
-        diagnosis: `Sinalizações: ${flags.join("; ")}\nHipóteses: ${hypotheses.join("; ")}`,
-        plan: plan ? JSON.stringify(plan.plan.meals) : "Sem plano gerado.",
-      } });
+      const report = await generateReport({ data: { patient: `${patient?.name ?? ""} | ${profile.age ?? "?"} anos | ${patient?.sex ?? "não informado"}`, anamnesis: anamnesisText, anthropometry: analysisText, energy: energyText, diagnosis: `Sinalizações: ${flags.join("; ")}\nHipóteses: ${hypotheses.join("; ")}`, plan: plan ? JSON.stringify(plan.plan.meals) : "Sem plano gerado." } });
       await db.saveReport(id, report.report);
       await db.updateConsultation(id, { clinical_summary: summary.summary, status: "finalizada" });
       void queryClient.invalidateQueries({ queryKey: ["consultation", id] });
@@ -303,7 +246,7 @@ function ConsultationPage() {
     }, "Parecer gerado.");
   };
 
-  const completed = [Boolean(segments.data?.length), Object.values(anamnesis).some((field) => field?.value && field.status !== "recusado"), Object.values(anthro).some(Boolean), Boolean(energyResult.tee), recall.length > 0, hypotheses.length > 0 || flags.length > 0, Boolean(plan)];
+  const completed = [Boolean(segments.data?.length), Object.values(anamnesis).some((field) => field?.value && field.status !== "recusado"), Object.values(anthro).some(Boolean), Boolean(energyResult.targetKcal ?? energyResult.maintenanceKcal), recall.some((item) => Boolean(item.foods?.trim())), hypotheses.length > 0 || flags.length > 0, Boolean(plan)];
   const goNext = () => setStep((value) => Math.min(STEPS.length - 1, value + 1));
   const goPrevious = () => setStep((value) => Math.max(0, value - 1));
   const operationalStatus = finalizingAudio ? "Finalizando áudio…" : recording ? "Gravando" : processingCount > 0 ? "Processando transcrição…" : pendingCount > 0 ? `${pendingCount} trecho${pendingCount === 1 ? "" : "s"} aguardando sincronização` : "Tudo sincronizado";
@@ -321,33 +264,15 @@ function ConsultationPage() {
 
       {step === 1 ? <AnamnesisPanel fields={anamnesis} onChange={setAnamnesis} /> : null}
 
-      {step === 2 ? <div className="space-y-4">
-        <AnthropometryPanel data={anthro} interpretation={interpretation} profile={profile} formula={formula} onFormulaChange={setFormula} onChange={setAnthro} />
-        <ActionBar busy={busy === "antro"} disabled={busy !== null} label="Interpretar e salvar avaliação" icon={<Sparkles />} onAction={() => void run("antro", async () => { const result = await interpretAnthropometry({ data: { data: `${JSON.stringify(anthro)}\n\n${analysisText}` } }); setInterpretation(result.interpretation); await db.saveAnthropometry(id, { ...anthro, formula }, result.interpretation); })} secondary={<Button size="sm" variant="outline" onClick={() => void run("save-antro", async () => db.saveAnthropometry(id, { ...anthro, formula }, interpretation))}><Save /> Salvar medidas</Button>} />
-      </div> : null}
+      {step === 2 ? <div className="space-y-4"><AnthropometryPanel data={anthro} interpretation={interpretation} profile={profile} formula={formula} onFormulaChange={setFormula} onChange={setAnthro} /><ActionBar busy={busy === "antro"} disabled={busy !== null} label="Interpretar e salvar avaliação" icon={<Sparkles />} onAction={() => void run("antro", async () => { const result = await interpretAnthropometry({ data: { data: `${JSON.stringify(anthro)}\n\n${analysisText}` } }); setInterpretation(result.interpretation); await db.saveAnthropometry(id, { ...anthro, formula }, result.interpretation); })} secondary={<Button size="sm" variant="outline" onClick={() => void run("save-antro", async () => db.saveAnthropometry(id, { ...anthro, formula }, interpretation))}><Save /> Salvar medidas</Button>} /></div> : null}
 
-      {step === 3 ? <div className="space-y-4">
-        <EnergyPanel value={energy} onChange={setEnergy} />
-        <ActionBar busy={busy === "energia"} disabled={busy !== null} label="Salvar cálculos" icon={<Save />} onAction={() => void run("energia", async () => db.saveConduct(id, { ...conduct, kcal: energyResult.tee ?? conduct.kcal, energy: energy as unknown as Record<string, unknown> }))} />
-      </div> : null}
+      {step === 3 ? <div className="space-y-4"><EnergyPanel value={energy} onChange={setEnergy} /><ActionBar busy={busy === "energia"} disabled={busy !== null} label="Salvar cálculos" icon={<Save />} onAction={() => void run("energia", async () => db.saveConduct(id, { ...conduct, kcal: energyResult.targetKcal ?? energyResult.maintenanceKcal ?? conduct.kcal, energy: energy as unknown as Record<string, unknown> }))} /></div> : null}
 
-      {step === 4 ? <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-border p-3">
-          <span className="text-sm text-muted-foreground">Captar o relato do paciente por voz:</span>
-          <DictationButton label="Gravar recordatório" onText={(text) => void run("recall", async () => {
-            const result = await structureRecall({ data: { transcript: text } });
-            const created = result.items.map((item, index) => ({ id: crypto.randomUUID(), time_label: item.time_label, foods: item.foods, amount: item.amount, preparation: item.preparation, notes: "", position: recall.length + index }));
-            setRecall((items) => [...items, ...created]);
-            for (const item of created) await db.upsertRecallItem(id, item);
-          }, "Recordatório estruturado.")} />
-          {busy === "recall" ? <span className="text-xs text-muted-foreground">Organizando as refeições…</span> : null}
-        </div>
-        <RecallPanel items={recall} onChange={(item) => { setRecall((items) => items.map((current) => current.id === item.id ? item : current)); void db.upsertRecallItem(id, item); }} onRemove={(itemId) => { setRecall((items) => items.filter((item) => item.id !== itemId)); void db.deleteRecallItem(itemId); }} onAdd={() => { const item: RecallItem = { id: crypto.randomUUID(), time_label: "", foods: "", amount: "", preparation: "", notes: "", position: recall.length }; setRecall((items) => [...items, item]); void db.upsertRecallItem(id, item); }} />
-      </div> : null}
+      {step === 4 ? <FoodRecallPanel consultationId={id} items={recall} transcript={transcriptText} onChange={setRecall} /> : null}
 
       {step === 5 ? <div className="space-y-4"><ActionBar busy={busy === "diag"} disabled={busy !== null} label="Analisar consulta completa" icon={<Sparkles />} onAction={() => void run("diag", async () => { const result = await analyzeConsultation({ data: { anamnesis: `${anamnesisText}\n\nTranscrição:\n${transcriptText.slice(-8000)}`, anthropometry: `${analysisText}\n\n${energyText}`, recall: JSON.stringify(recall) } }); setFlags(result.flags); setHypotheses(result.hypotheses); await db.saveDiagnoses(id, result.hypotheses, result.flags); })} /><DiagnosisPanel hypotheses={hypotheses} flags={flags} onChange={(next) => { setHypotheses(next); void db.saveDiagnoses(id, next, flags); }} /></div> : null}
 
-      {step === 6 ? <MenuStep conduct={conduct} setConduct={setConduct} busy={busy} foods={foods.data ?? []} plan={plan} targetKcal={energyResult.tee} onGenerate={() => void generatePlan()} onUpdatePlan={updatePlan} onSave={() => void savePlan()} onFinish={() => void finish()} /> : null}
+      {step === 6 ? <MenuStep conduct={conduct} setConduct={setConduct} busy={busy} foods={foods.data ?? []} plan={plan} targetKcal={energyResult.targetKcal ?? energyResult.tee} onGenerate={() => void generatePlan()} onUpdatePlan={updatePlan} onSave={() => void savePlan()} onFinish={() => void finish()} /> : null}
 
       <div className="mt-8 flex items-center justify-between border-t border-border pt-4"><Button variant="ghost" size="sm" onClick={goPrevious} disabled={step === 0}><ArrowLeft /> Anterior</Button>{step < STEPS.length - 1 ? <Button size="sm" onClick={goNext} disabled={finalizingAudio}>Próxima etapa <ArrowRight /></Button> : <Link to="/prontuario/$id" params={{ id }}><Button size="sm" variant="secondary"><FileText /> Abrir parecer</Button></Link>}</div>
     </main>
@@ -357,52 +282,20 @@ function ConsultationPage() {
 function InfoCard({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) { return <div className="rounded-md border border-border p-4"><div className="flex items-center gap-2 text-sm font-medium">{icon}{title}</div><p className="mt-2 text-xs leading-5 text-muted-foreground">{text}</p></div>; }
 function ActionBar({ busy, disabled, label, icon, onAction, secondary }: { busy: boolean; disabled: boolean; label: string; icon: React.ReactNode; onAction: () => void; secondary?: React.ReactNode }) { return <div className="flex flex-wrap items-center gap-2"><Button size="sm" disabled={disabled} onClick={onAction}>{icon}{busy ? "Processando…" : label}</Button>{secondary}</div>; }
 
-/** Última aba: cardápio pré-carregado, editável, pronto para imprimir/enviar. */
 function MenuStep({ conduct, setConduct, busy, foods, plan, targetKcal, onGenerate, onUpdatePlan, onSave, onFinish }: {
   conduct: db.ConductRow; setConduct: (value: db.ConductRow) => void; busy: string | null; foods: Food[];
   plan: { plan: MealPlan; rationale: string } | null; targetKcal: number | null;
   onGenerate: () => void; onUpdatePlan: (plan: MealPlan) => void; onSave: () => void; onFinish: () => void;
 }) {
-  const editGrams = (mealIndex: number, itemIndex: number, grams: number) => {
-    if (!plan) return;
-    const meals = plan.plan.meals.map((meal, mi) => mi !== mealIndex ? meal : { ...meal, items: meal.items.map((item, ii) => ii !== itemIndex ? item : scaleItem(item, grams)) });
-    onUpdatePlan(recalculatePlan(meals));
-  };
-  const removeItem = (mealIndex: number, itemIndex: number) => {
-    if (!plan) return;
-    const meals = plan.plan.meals.map((meal, mi) => mi !== mealIndex ? meal : { ...meal, items: meal.items.filter((_, ii) => ii !== itemIndex) });
-    onUpdatePlan(recalculatePlan(meals));
-  };
-
+  const editGrams = (mealIndex: number, itemIndex: number, grams: number) => { if (!plan) return; const meals = plan.plan.meals.map((meal, mi) => mi !== mealIndex ? meal : { ...meal, items: meal.items.map((item, ii) => ii !== itemIndex ? item : scaleItem(item, grams)) }); onUpdatePlan(recalculatePlan(meals)); };
+  const removeItem = (mealIndex: number, itemIndex: number) => { if (!plan) return; const meals = plan.plan.meals.map((meal, mi) => mi !== mealIndex ? meal : { ...meal, items: meal.items.filter((_, ii) => ii !== itemIndex) }); onUpdatePlan(recalculatePlan(meals)); };
   return <div className="space-y-6">
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{([["kcal", "Calorias alvo (kcal)"], ["meals_count", "Refeições por dia"], ["goal", "Objetivo"], ["phase", "Fase"]] as const).map(([key, label]) => <label key={key} className="text-xs text-muted-foreground">{label}<Input type={key === "kcal" || key === "meals_count" ? "number" : "text"} min={key === "meals_count" ? 3 : undefined} max={key === "meals_count" ? 6 : undefined} value={conduct[key] ?? ""} onChange={(event) => setConduct({ ...conduct, [key]: key === "kcal" || key === "meals_count" ? Number(event.target.value) || 0 : event.target.value })} className="mt-1 text-sm" /></label>)}</div>
-    {targetKcal ? <p className="text-xs text-muted-foreground">GET calculado na aba de cálculos: <span className="font-medium tabular-nums text-foreground">{targetKcal} kcal/dia</span>.</p> : null}
+    {targetKcal ? <p className="text-xs text-muted-foreground">Meta calórica definida na aba de cálculos: <span className="font-medium tabular-nums text-foreground">{targetKcal} kcal/dia</span>.</p> : null}
     <div><p className="mb-2 text-xs text-muted-foreground">Restrições alimentares</p><div className="flex flex-wrap gap-2">{RESTRICTION_OPTIONS.map((option) => { const active = conduct.restrictions.includes(option.value); return <Button key={option.value} type="button" size="sm" variant={active ? "default" : "outline"} onClick={() => setConduct({ ...conduct, restrictions: active ? conduct.restrictions.filter((value) => value !== option.value) : [...conduct.restrictions, option.value] })}>{active ? <Check /> : null}{option.label}</Button>; })}</div></div>
-
-    <div className="flex flex-wrap items-center gap-2">
-      <Button size="sm" disabled={busy !== null || !foods.length} onClick={onGenerate}><Sparkles />{busy === "plano" ? "Montando cardápio…" : plan ? "Regenerar cardápio" : "Gerar cardápio"}</Button>
-      {plan ? <Button size="sm" variant="outline" disabled={busy !== null} onClick={onSave}><Save /> Salvar edições</Button> : null}
-      {plan ? <Button size="sm" variant="secondary" disabled={busy !== null} onClick={onFinish}><FileText />{busy === "parecer" ? "Gerando parecer…" : "Gerar parecer e finalizar"}</Button> : null}
-    </div>
+    <div className="flex flex-wrap items-center gap-2"><Button size="sm" disabled={busy !== null || !foods.length} onClick={onGenerate}><Sparkles />{busy === "plano" ? "Montando cardápio…" : plan ? "Regenerar cardápio" : "Gerar cardápio"}</Button>{plan ? <Button size="sm" variant="outline" disabled={busy !== null} onClick={onSave}><Save /> Salvar edições</Button> : null}{plan ? <Button size="sm" variant="secondary" disabled={busy !== null} onClick={onFinish}><FileText />{busy === "parecer" ? "Gerando parecer…" : "Gerar parecer e finalizar"}</Button> : null}</div>
     {!foods.length ? <p className="text-sm text-destructive">A base de alimentos ainda não está disponível.</p> : null}
-
-    {plan ? <div className="space-y-4">
-      <div className="grid gap-2 sm:grid-cols-4"><Summary label="Total" value={`${Math.round(plan.plan.totals.kcal)} kcal`} /><Summary label="Proteínas" value={`${plan.plan.totals.protein_g} g`} /><Summary label="Carboidratos" value={`${plan.plan.totals.carb_g} g`} /><Summary label="Gorduras" value={`${plan.plan.totals.fat_g} g`} /></div>
-      {plan.plan.meals.map((meal, mealIndex) => <div key={meal.slot} className="rounded-md border border-border">
-        <div className="flex items-center justify-between border-b border-border px-3 py-2 text-sm font-medium"><span>{MEAL_SLOT_LABELS[meal.slot]}</span><span className="text-xs tabular-nums text-muted-foreground">{Math.round(meal.totals.kcal)} kcal</span></div>
-        <ul className="divide-y divide-border text-sm">{meal.items.map((item, itemIndex) => <li key={`${item.food_id}-${itemIndex}`} className="flex items-center justify-between gap-3 px-3 py-2">
-          <span className="min-w-0"><span className="block truncate">{item.name}</span><span className="text-xs text-muted-foreground">{item.household_measure}</span></span>
-          <span className="flex shrink-0 items-center gap-2">
-            <Input type="number" min={1} value={item.grams} onChange={(event) => editGrams(mealIndex, itemIndex, Number(event.target.value) || 1)} className="h-8 w-20 text-right text-sm" aria-label={`Quantidade de ${item.name} em gramas`} />
-            <span className="text-xs text-muted-foreground">g</span>
-            <span className="w-16 text-right text-xs tabular-nums text-muted-foreground">{Math.round(item.macros.kcal)} kcal</span>
-            <Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground" title="Remover item" aria-label="Remover item" onClick={() => removeItem(mealIndex, itemIndex)}><Trash2 /></Button>
-          </span>
-        </li>)}</ul>
-      </div>)}
-      <div className="whitespace-pre-wrap rounded-md border border-border bg-muted/40 p-3 text-sm">{plan.rationale}</div>
-      <DictationField label="Observações da conduta" value={conduct.notes ?? ""} onChange={(notes) => setConduct({ ...conduct, notes })} />
-    </div> : <div className="flex items-start gap-3 rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground"><AlertTriangle className="mt-0.5 size-4 shrink-0" />{busy === "plano" ? "Montando o cardápio com os dados das abas anteriores…" : "Ajuste os critérios e gere a primeira versão do cardápio."}</div>}
+    {plan ? <div className="space-y-4"><div className="grid gap-2 sm:grid-cols-4"><Summary label="Total" value={`${Math.round(plan.plan.totals.kcal)} kcal`} /><Summary label="Proteínas" value={`${plan.plan.totals.protein_g} g`} /><Summary label="Carboidratos" value={`${plan.plan.totals.carb_g} g`} /><Summary label="Gorduras" value={`${plan.plan.totals.fat_g} g`} /></div>{plan.plan.meals.map((meal, mealIndex) => <div key={meal.slot} className="rounded-md border border-border"><div className="flex items-center justify-between border-b border-border px-3 py-2 text-sm font-medium"><span>{MEAL_SLOT_LABELS[meal.slot]}</span><span className="text-xs tabular-nums text-muted-foreground">{Math.round(meal.totals.kcal)} kcal</span></div><ul className="divide-y divide-border text-sm">{meal.items.map((item, itemIndex) => <li key={`${item.food_id}-${itemIndex}`} className="flex items-center justify-between gap-3 px-3 py-2"><span className="min-w-0"><span className="block truncate">{item.name}</span><span className="text-xs text-muted-foreground">{item.household_measure}</span></span><span className="flex shrink-0 items-center gap-2"><Input type="number" min={1} value={item.grams} onChange={(event) => editGrams(mealIndex, itemIndex, Number(event.target.value) || 1)} className="h-8 w-20 text-right text-sm" aria-label={`Quantidade de ${item.name} em gramas`} /><span className="text-xs text-muted-foreground">g</span><span className="w-16 text-right text-xs tabular-nums text-muted-foreground">{Math.round(item.macros.kcal)} kcal</span><Button type="button" variant="ghost" size="icon" className="size-7 text-muted-foreground" title="Remover item" aria-label="Remover item" onClick={() => removeItem(mealIndex, itemIndex)}><Trash2 /></Button></span></li>)}</ul></div>)}<div className="whitespace-pre-wrap rounded-md border border-border bg-muted/40 p-3 text-sm">{plan.rationale}</div><DictationField label="Observações da conduta" value={conduct.notes ?? ""} onChange={(notes) => setConduct({ ...conduct, notes })} /></div> : <div className="flex items-start gap-3 rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground"><AlertTriangle className="mt-0.5 size-4 shrink-0" />{busy === "plano" ? "Montando o cardápio com os dados das abas anteriores…" : "Ajuste os critérios e gere a primeira versão do cardápio."}</div>}
   </div>;
 }
 function Summary({ label, value }: { label: string; value: string }) { return <div className="rounded-md border border-border px-3 py-2"><div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div><div className="mt-1 text-sm font-semibold tabular-nums">{value}</div></div>; }
