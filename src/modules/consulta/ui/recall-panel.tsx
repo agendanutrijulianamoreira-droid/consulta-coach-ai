@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import * as db from "@/lib/nutrios/repository";
 import type { RecallItem } from "@/lib/nutrios/types";
 import { extractFoodRecall } from "@/modules/consulta/application/recall.functions";
-import { analyzeRecall, mergeRecallSuggestions, sortRecall } from "@/modules/consulta/domain/recall";
+import { analyzeRecall, mergeRecallSuggestions } from "@/modules/consulta/domain/recall";
 
 type SaveState = "saved" | "pending" | "saving" | "error";
 
@@ -150,7 +150,9 @@ export function FoodRecallPanel({ consultationId, items, transcript, onChange }:
             <Button type="button" variant="outline" size="sm" disabled={!transcript.trim() || extracting} onClick={() => void extractFromText(transcript, "Conversa revisada.")}>
               {extracting ? <Loader2 className="animate-spin" /> : <RefreshCw />} Atualizar da conversa
             </Button>
-            <DictationButton label="Relatar recordatório" disabled={extracting} onText={(text) => void extractFromText(text, "Relato organizado.")} />
+            <span className={extracting ? "pointer-events-none opacity-50" : ""} aria-disabled={extracting}>
+              <DictationButton label="Relatar recordatório" onText={(text) => void extractFromText(text, "Relato organizado.")} />
+            </span>
           </div>
         </div>
 
