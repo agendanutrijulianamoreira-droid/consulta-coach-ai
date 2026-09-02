@@ -1,44 +1,46 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import type { Json } from "@/integrations/supabase/types";
+import type { Database, Json } from "@/integrations/supabase/types";
 import { EMPTY_REASONING, normalizeReasoning, type ClinicalReasoning } from "../domain/clinical-reasoning";
 
+type DiagnosisBase = Database["public"]["Tables"]["diagnoses"];
+type ExtendedDatabase = Omit<Database, "public"> & {
+  public: Omit<Database["public"], "Tables"> & {
+    Tables: Omit<Database["public"]["Tables"], "diagnoses"> & {
+      diagnoses: {
+        Row: DiagnosisBase["Row"] & { reasoning: Json };
+        Insert: DiagnosisBase["Insert"] & { reasoning?: Json };
+        Update: DiagnosisBase["Update"] & { reasoning?: Json };
+        Relationships: DiagnosisBase["Relationships"];
+      };
+    };
+  };
+};
+
+const clinicalSupabase = supabase as unknown as SupabaseClient<ExtendedDatabase>;
 const json = (value: unknown) => value as Json;
 
-type StoredEnvelope = { schema: "clinical-reasoning-v1"; reasoning: ClinicalReasoning };
-
 export async function getClinicalReasoning(consultationId: string): Promise<ClinicalReasoning> {
-  const { data, error } = await supabase
+  const { data, error } = await clinicalSupabase
     .from("diagnoses")
-    .select("hypotheses, recall_flags")
+    .select("reasoning, hypotheses, recall_flags")
     .eq("consultation_id", consultationId)
     .maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) return EMPTY_REASONING;
 
-  const raw = data.hypotheses as unknown;
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    const envelope = raw as Partial<StoredEnvelope>;
-    if (envelope.schema === "clinical-reasoning-v1" && envelope.reasoning) return normalizeReasoning(envelope.reasoning);
-  }
-
-  return normalizeReasoning(null, {
-    hypotheses: Array.isArray(raw) ? raw.map(String) : [],
+  const raw = data.reasoning as unknown;
+  const normalized = normalizeReasoning(raw, {
+    hypotheses: Array.isArray(data.hypotheses) ? data.hypotheses.map(String) : [],
     flags: Array.isArray(data.recall_flags) ? data.recall_flags.map(String) : [],
   });
+  return normalized;
 }
 
 export async function saveClinicalReasoning(consultationId: string, reasoning: ClinicalReasoning) {
-  const envelope: StoredEnvelope = { schema: "clinical-reasoning-v1", reasoning };
-  const acceptedLegacyTitles = reasoning.hypotheses
-    .filter((item) => item.status === "accepted" || item.status === "edited")
-    .map((item) => item.title);
-  const { error } = await supabase.from("diagnoses").upsert({
+  const { error } = await clinicalSupabase.from("diagnoses").upsert({
     consultation_id: consultationId,
-    hypotheses: json(envelope),
-    recall_flags: json(reasoning.flags),
+    reasoning: json(reasoning),
   }, { onConflict: "consultation_id" });
   if (error) throw new Error(error.message);
-
-  // Keep this variable intentionally materialized for migration/debug visibility.
-  void acceptedLegacyTitles;
 }
