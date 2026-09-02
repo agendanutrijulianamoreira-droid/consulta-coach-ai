@@ -109,30 +109,117 @@ export interface ConductInput {
   restrictions: string[];
 }
 
-/** Campos da anamnese extraídos automaticamente da transcrição. */
+/**
+ * Campos da anamnese clínica. Chaves antigas permanecem para garantir
+ * compatibilidade com prontuários já gravados em JSONB.
+ */
 export const ANAMNESIS_FIELDS = [
-  { key: "queixa_principal", label: "Queixa principal" },
-  { key: "historia_doenca", label: "História da doença" },
-  { key: "sintomas", label: "Sintomas" },
-  { key: "medicamentos", label: "Uso de medicamentos" },
-  { key: "suplementos", label: "Suplementos" },
-  { key: "exames", label: "Exames" },
-  { key: "doencas", label: "Doenças" },
-  { key: "alergias", label: "Alergias" },
-  { key: "intolerancias", label: "Intolerâncias" },
-  { key: "rotina", label: "Rotina" },
-  { key: "sono", label: "Sono" },
-  { key: "estresse", label: "Estresse" },
-  { key: "exercicio", label: "Exercício" },
-  { key: "agua", label: "Água" },
-  { key: "evacuacao", label: "Evacuação" },
-  { key: "objetivos", label: "Objetivos" },
-  { key: "motivacao", label: "Motivação" },
-  { key: "preferencias", label: "Preferências" },
-  { key: "restricoes_alimentares", label: "Restrições alimentares" },
+  { key: "objetivo_consulta", label: "Objetivo da consulta", required: true },
+  { key: "queixa_principal", label: "Queixa principal", required: true },
+  { key: "historia_doenca", label: "História clínica atual", required: false },
+  { key: "sintomas", label: "Sintomas e queixas atuais", required: true },
+  { key: "doencas", label: "Patologias / diagnósticos", required: true },
+  { key: "historico_familiar", label: "Histórico familiar", required: false },
+  { key: "cirurgias_internacoes", label: "Cirurgias / internações", required: false },
+  { key: "medicamentos", label: "Medicamentos em uso", required: true },
+  { key: "suplementos", label: "Suplementos", required: false },
+  { key: "exames", label: "Exames recentes / alterações", required: false },
+  { key: "alergias", label: "Alergias", required: true },
+  { key: "intolerancias", label: "Intolerâncias", required: true },
+  { key: "rotina", label: "Rotina / trabalho / horários", required: true },
+  { key: "sono", label: "Sono", required: true },
+  { key: "estresse", label: "Estresse / saúde emocional", required: false },
+  { key: "exercicio", label: "Exercício / atividade física", required: true },
+  { key: "tabagismo", label: "Tabagismo", required: false },
+  { key: "alcool", label: "Consumo de álcool", required: false },
+  { key: "agua", label: "Hidratação", required: true },
+  { key: "evacuacao", label: "Evacuação / hábito intestinal", required: true },
+  { key: "sintomas_gastrointestinais", label: "Sintomas gastrointestinais", required: false },
+  { key: "antibioticos_probioticos", label: "Antibióticos / probióticos recentes", required: false },
+  { key: "refeicoes_padrao", label: "Padrão de refeições", required: true },
+  { key: "frutas", label: "Consumo de frutas", required: false },
+  { key: "lacteos", label: "Consumo de lácteos", required: false },
+  { key: "preferencias", label: "Preferências alimentares", required: false },
+  { key: "aversoes", label: "Aversões / alimentos que não gosta", required: false },
+  { key: "restricoes_alimentares", label: "Restrições alimentares", required: true },
+  { key: "fome_saciedade", label: "Fome / saciedade", required: false },
+  { key: "compulsao_desejos", label: "Compulsão / desejos alimentares", required: false },
+  { key: "fim_de_semana", label: "Fim de semana / refeições livres", required: false },
+  { key: "saude_hormonal", label: "Saúde hormonal / sintomas associados", required: false },
+  { key: "ciclo_menstrual_climaterio", label: "Ciclo menstrual / climatério / menopausa", required: false },
+  { key: "gestacao_lactacao", label: "Gestação / lactação", required: false },
+  { key: "objetivos", label: "Resultados desejados", required: true },
+  { key: "motivacao", label: "Motivação / prontidão", required: false },
+  { key: "dificuldades", label: "Dificuldades / barreiras", required: true },
+  { key: "metas", label: "Metas combinadas", required: false },
 ] as const;
 
 export type AnamnesisKey = (typeof ANAMNESIS_FIELDS)[number]["key"];
+
+export const ANAMNESIS_SECTIONS: {
+  id: string;
+  title: string;
+  description: string;
+  fields: AnamnesisKey[];
+}[] = [
+  {
+    id: "motivo",
+    title: "Motivo e objetivo",
+    description: "O que trouxe o paciente e o que ele espera alcançar.",
+    fields: ["objetivo_consulta", "queixa_principal", "objetivos", "motivacao", "dificuldades", "metas"],
+  },
+  {
+    id: "clinico",
+    title: "Histórico clínico",
+    description: "Patologias, sintomas, antecedentes, medicamentos e exames.",
+    fields: [
+      "historia_doenca",
+      "sintomas",
+      "doencas",
+      "historico_familiar",
+      "cirurgias_internacoes",
+      "medicamentos",
+      "suplementos",
+      "exames",
+      "alergias",
+      "intolerancias",
+    ],
+  },
+  {
+    id: "estilo_vida",
+    title: "Estilo de vida",
+    description: "Rotina, sono, atividade física, hidratação e hábitos.",
+    fields: ["rotina", "sono", "estresse", "exercicio", "tabagismo", "alcool", "agua"],
+  },
+  {
+    id: "intestinal",
+    title: "Saúde gastrointestinal",
+    description: "Funcionamento intestinal e sintomas digestivos relevantes.",
+    fields: ["evacuacao", "sintomas_gastrointestinais", "antibioticos_probioticos"],
+  },
+  {
+    id: "alimentar",
+    title: "Comportamento e rotina alimentar",
+    description: "Padrão alimentar, preferências, restrições e comportamento.",
+    fields: [
+      "refeicoes_padrao",
+      "frutas",
+      "lacteos",
+      "preferencias",
+      "aversoes",
+      "restricoes_alimentares",
+      "fome_saciedade",
+      "compulsao_desejos",
+      "fim_de_semana",
+    ],
+  },
+  {
+    id: "hormonal",
+    title: "Saúde hormonal e reprodutiva",
+    description: "Preencher quando aplicável ao contexto clínico do paciente.",
+    fields: ["saude_hormonal", "ciclo_menstrual_climaterio", "gestacao_lactacao"],
+  },
+];
 
 /** Estado de revisão de cada campo sugerido pela IA. */
 export type SuggestionStatus = "sugerido" | "aceito" | "editado" | "recusado";

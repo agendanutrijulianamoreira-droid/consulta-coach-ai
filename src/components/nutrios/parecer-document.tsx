@@ -1,18 +1,16 @@
-/**
- * Documento visual do Parecer Nutricional entregue ao paciente.
- * Layout inspirado no modelo impresso da Dra. Juliana Moreira, com a paleta
- * da marca (vinho, dourado, areia e creme). Otimizado para tela e impressão A4.
- */
 import type { ParecerDocument, ParecerGauge, ParecerRow } from "@/modules/parecer/domain/parecer";
 import { biaRows, circumferenceRows, compositionGauges } from "@/modules/parecer/domain/parecer";
 
-const WINE = "#6B2233";
-const WINE_SOFT = "#8C3A46";
-const GOLD = "#C08A2E";
-const SAND = "#EFE3D6";
-const CREAM = "#FBF6F0";
-const INK = "#2B2320";
-const MUTED = "#7A6A61";
+const GREEN = "#0B5D3B";
+const GREEN_DARK = "#08482F";
+const GREEN_SOFT = "#E6F2EC";
+const GOLD = "#C6A244";
+const INK = "#202522";
+const MUTED = "#67716B";
+const LINE = "#D8E2DC";
+const ALERT = "#D95C4B";
+const AMBER = "#D68A22";
+const BLUE_SOFT = "#E9F1FA";
 
 export function ParecerDocument({ doc }: { doc: ParecerDocument }) {
   const { patient, metrics, texts } = doc;
@@ -20,264 +18,108 @@ export function ParecerDocument({ doc }: { doc: ParecerDocument }) {
   const circ = circumferenceRows(metrics);
   const gauges = compositionGauges(metrics);
 
-  return (
-    <div className="parecer-doc mx-auto w-full max-w-[820px] text-[13px] leading-relaxed" style={{ color: INK, fontFamily: "'Cormorant Garamond', Georgia, serif" }}>
-      <Sheet>
-        <Header patient={patient} />
-        <Block title="Identificação da paciente">
-          <div className="grid grid-cols-2 gap-px" style={{ background: SAND }}>
-            <Field label="Paciente" value={patient.name} />
-            <Field label="Data da avaliação" value={patient.evaluationDate} />
-            <Field label="Responsável técnico" value="Dra. Juliana Moreira | CRN-9 22234" />
-            <Field label="Idade" value={patient.age !== null ? `${patient.age} anos` : "—"} />
-            <Field label="Fase" value={patient.phase} />
-            <Field label="Documento gerado em" value={doc.generatedAt} />
-          </div>
-        </Block>
+  return <div className="parecer-doc mx-auto w-full max-w-[850px] text-[12px] leading-relaxed" style={{ color: INK, fontFamily: "Arial, Helvetica, sans-serif" }}>
+    <Sheet>
+      <Header patient={patient} />
+      <Section title="Identificação da paciente">
+        <table className="w-full border-collapse text-[11px]"><tbody>
+          <tr><Cell label="Paciente" value={patient.name} wide /><Cell label="Data da avaliação" value={patient.evaluationDate} /></tr>
+          <tr><Cell label="Responsável técnico" value="Dra. Juliana Moreira | CRN-9 22234" wide /><Cell label="" value="" /></tr>
+          <tr><Cell label="Fase" value={patient.phase} wide /><Cell label="Idade da paciente" value={patient.age !== null ? `${patient.age} anos` : "—"} /></tr>
+        </tbody></table>
+      </Section>
 
-        <Block title="Parâmetros antropométricos básicos">
-          <div className="grid grid-cols-4 gap-3">
-            <BigStat label="Peso atual" value={fmt(metrics.weight, "kg")} caption="Base de cálculo" />
-            <BigStat label="Altura" value={fmt(metrics.height, "cm", 0)} caption="Estatura" />
-            <BigStat label="IMC" value={fmt(metrics.bmi, "")} caption={metrics.bmiClass ?? "—"} accent />
-            <BigStat label="Gordura visceral" value={metrics.visceral !== null ? `IGV ${metrics.visceral}` : "—"} caption={metrics.visceralClass ?? "—"} accent />
-          </div>
-        </Block>
-
-        {rows.length ? (
-          <Block title="Análise por bioimpedância e composição interna">
-            <Table rows={rows} headers={["Parâmetro", "Resultado", "Classificação / referência clínica"]} />
-            <p className="mt-2 text-[10px] leading-4" style={{ color: MUTED, fontFamily: "system-ui, sans-serif" }}>
-              (*) Linhas em destaque: valores obtidos por cálculo clínico validado (peso ósseo a partir da massa livre de gordura; hidratação corporal; taxa metabólica basal; CMB e AMB a partir da dobra tricipital e da circunferência do braço). Apresentados como achados clínicos.
-            </p>
-          </Block>
-        ) : null}
-
-        <Block title="Score de composição corporal">
-          <Gauge score={metrics.score} />
-        </Block>
-        <Footer page={1} name={patient.name} />
-      </Sheet>
-
-      <Sheet>
-        <Header patient={patient} />
-        {circ.length ? (
-          <Block title="Circunferências e risco metabólico">
-            <Table rows={circ} headers={["Circunferência", "Medida", "Referência e status"]} />
-          </Block>
-        ) : null}
-
-        {gauges.length ? (
-          <Block title="Mapa de composição corporal">
-            <p className="mb-3 text-[11px]" style={{ color: MUTED, fontFamily: "system-ui, sans-serif" }}>
-              Faixa em destaque = referência saudável. Marcador = valor atual da paciente.
-            </p>
-            <div className="space-y-4">
-              {gauges.map((gauge) => (
-                <Bar key={gauge.label} gauge={gauge} />
-              ))}
-            </div>
-          </Block>
-        ) : null}
-
-        <Block title="Interpretação clínica">
-          <div className="space-y-3 text-[13.5px]">
-            <p>{texts.interpretacao_1}</p>
-            <p>{texts.interpretacao_2}</p>
-          </div>
-        </Block>
-        <Footer page={2} name={patient.name} />
-      </Sheet>
-
-      <Sheet>
-        <Header patient={patient} />
-        <Block title="Prioridades clínicas e direcionamento nutricional">
-          <div className="space-y-3">
-            {texts.prioridades.map((item, index) => (
-              <div key={item.titulo} className="flex overflow-hidden rounded-sm" style={{ background: CREAM, border: `1px solid ${SAND}` }}>
-                <div className="flex w-11 shrink-0 items-center justify-center text-base font-semibold text-white" style={{ background: index % 2 === 0 ? WINE : WINE_SOFT }}>
-                  {String(index + 1).padStart(2, "0")}
-                </div>
-                <div className="px-4 py-3">
-                  <div className="text-[14px] font-semibold" style={{ color: WINE }}>{item.titulo}</div>
-                  <p className="mt-1 text-[13px]">{item.texto}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Block>
-
-        {texts.metas.length ? (
-          <Block title="Metas do ciclo de acompanhamento">
-            <table className="w-full border-collapse text-[12.5px]">
-              <thead>
-                <tr style={{ background: WINE, color: "#fff", fontFamily: "system-ui, sans-serif" }}>
-                  {["Parâmetro", "Atual", "Meta 60-90 dias", "Meta da jornada"].map((header) => (
-                    <th key={header} className="px-3 py-2 text-left text-[10.5px] font-semibold uppercase tracking-wider">{header}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {texts.metas.map((meta, index) => (
-                  <tr key={meta.parametro} style={{ background: index % 2 ? CREAM : "transparent" }}>
-                    <td className="border-b px-3 py-2 font-semibold" style={{ borderColor: SAND, color: WINE }}>{meta.parametro}</td>
-                    <td className="border-b px-3 py-2" style={{ borderColor: SAND }}>{meta.atual}</td>
-                    <td className="border-b px-3 py-2" style={{ borderColor: SAND }}>{meta.meta_60_90}</td>
-                    <td className="border-b px-3 py-2" style={{ borderColor: SAND }}>{meta.meta_final}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {texts.nota_metas ? <p className="mt-3 text-[12px] italic" style={{ color: MUTED }}>{texts.nota_metas}</p> : null}
-          </Block>
-        ) : null}
-
-        <div className="mt-10 flex flex-col items-center gap-1 text-center">
-          <div className="h-px w-56" style={{ background: GOLD }} />
-          <div className="text-[13px] font-semibold" style={{ color: WINE }}>Dra. Juliana Moreira</div>
-          <div className="text-[11px]" style={{ color: MUTED, fontFamily: "system-ui, sans-serif" }}>Nutricionista · CRN-9 22234 · Nutrição Funcional e Saúde da Mulher</div>
+      <Section title="Parâmetros antropométricos básicos">
+        <div className="grid grid-cols-4 overflow-hidden border" style={{ borderColor: LINE }}>
+          <Stat label="Peso atual" value={fmt(metrics.weight, "kg")} caption={metrics.weightEstimated ? "Peso estimado · Chumlea" : "Base de cálculo"} />
+          <Stat label="Altura" value={fmt(metrics.height, "cm", 0)} caption="Estatura" />
+          <Stat label="IMC" value={fmt(metrics.bmi, "")} caption={metrics.bmiClass ?? "—"} tone={metrics.bmi !== null && metrics.bmi >= 30 ? "attention" : "ok"} />
+          <Stat label="Gordura visceral" value={metrics.visceral !== null ? `IGV ${metrics.visceral}` : "—"} caption={metrics.visceralClass ?? "—"} tone="attention" />
         </div>
-        <Footer page={3} name={patient.name} />
-      </Sheet>
-    </div>
-  );
+      </Section>
+
+      {rows.length ? <Section title="Análise por bioimpedância (BIA) e composição interna">
+        <Table rows={rows} headers={["Parâmetro", "Resultado", "Classificação / Referência Clínica"]} />
+        <p className="mt-2 text-[9px] leading-4" style={{ color: MUTED }}>(*) Valores calculados são identificados no próprio documento. Peso ósseo só é calculado quando existem os diâmetros antropométricos necessários; não é estimado por percentual fixo da massa magra.</p>
+      </Section> : null}
+
+      <Section title="Score de composição corporal"><Gauge score={metrics.score} /></Section>
+      <Footer page={1} name={patient.name} />
+    </Sheet>
+
+    <Sheet>
+      <Header patient={patient} />
+      {circ.length ? <Section title="Circunferências e risco metabólico"><Table rows={circ} headers={["Circunferência", "Medida", "Referência / Status"]} /></Section> : null}
+      {gauges.length ? <Section title="Mapa de composição corporal">
+        <p className="mb-4 text-[10px]" style={{ color: MUTED }}>Zona verde = referência saudável. Marcador = valor atual da paciente.</p>
+        <div className="space-y-5">{gauges.map((gauge) => <Bar key={gauge.label} gauge={gauge} />)}</div>
+      </Section> : null}
+      <Section title="Interpretação clínica"><div className="space-y-3 text-[11.5px] leading-[1.65]"><p>{texts.interpretacao_1}</p><p>{texts.interpretacao_2}</p></div></Section>
+      <Footer page={2} name={patient.name} />
+    </Sheet>
+
+    <Sheet>
+      <Header patient={patient} />
+      <Section title="Prioridades clínicas e direcionamento nutricional">
+        <div className="space-y-5">{texts.prioridades.map((item, index) => <div key={`${item.titulo}-${index}`} className="grid grid-cols-[46px_1fr] gap-4"><div className="flex h-10 w-10 items-center justify-center text-[18px] font-bold" style={{ color: GREEN }}>{String(index + 1).padStart(2, "0")}</div><div><h3 className="text-[13px] font-bold" style={{ color: GREEN }}>{item.titulo}</h3><p className="mt-1 text-[11.5px] leading-[1.7]">{item.texto}</p></div></div>)}</div>
+      </Section>
+      <Footer page={3} name={patient.name} />
+    </Sheet>
+
+    <Sheet>
+      <Header patient={patient} />
+      {texts.metas.length ? <Section title="Metas quantitativas para próxima avaliação">
+        <table className="w-full border-collapse text-[10.5px]"><thead><tr style={{ background: GREEN, color: "white" }}>{["Parâmetro", "Atual", "Meta (60-90 dias)", "Meta final (1ª etapa)"].map((h) => <th key={h} className="border px-2 py-2 text-left font-semibold" style={{ borderColor: LINE }}>{h}</th>)}</tr></thead><tbody>{texts.metas.map((meta, index) => <tr key={`${meta.parametro}-${index}`} style={{ background: index % 2 ? "#F9FBFA" : GREEN_SOFT }}><td className="border px-2 py-2 font-semibold" style={{ borderColor: LINE, color: GREEN_DARK }}>{meta.parametro}</td><td className="border px-2 py-2" style={{ borderColor: LINE }}>{meta.atual}</td><td className="border px-2 py-2" style={{ borderColor: LINE }}>{meta.meta_60_90}</td><td className="border px-2 py-2" style={{ borderColor: LINE }}>{meta.meta_final}</td></tr>)}</tbody></table>
+        {texts.nota_metas ? <p className="mt-3 text-[9.5px] leading-4" style={{ color: MUTED }}>{texts.nota_metas}</p> : null}
+      </Section> : null}
+      <div className="mt-10 max-w-[320px] border-t-2 pt-2" style={{ borderColor: GREEN }}><div className="text-[13px] font-bold" style={{ color: GREEN }}>Dra. Juliana Moreira</div><div className="text-[10px]" style={{ color: MUTED }}>Nutricionista Especialista em Saúde da Mulher</div><div className="text-[10px]" style={{ color: MUTED }}>CRN-9 22234</div></div>
+      <p className="mt-6 text-[9px] leading-4" style={{ color: MUTED }}>Documento gerado em {doc.generatedAt}. Este parecer é de uso clínico exclusivo e não substitui consulta médica. Válido somente em conjunto com o prontuário completo da paciente.</p>
+      <Footer page={4} name={patient.name} />
+    </Sheet>
+  </div>;
 }
 
 function Sheet({ children }: { children: React.ReactNode }) {
-  return (
-    <section
-      className="relative mb-6 flex min-h-[1000px] flex-col px-10 py-8 shadow-sm print:mb-0 print:min-h-[1040px] print:shadow-none"
-      style={{ background: "#fff", border: `1px solid ${SAND}`, breakAfter: "page" }}
-    >
-      {children}
-    </section>
-  );
+  return <section className="relative mb-6 flex min-h-[1080px] flex-col bg-white px-12 py-8 shadow-sm print:mb-0 print:min-h-[1080px] print:shadow-none" style={{ border: `1px solid ${LINE}`, breakAfter: "page" }}>{children}</section>;
 }
 
 function Header({ patient }: { patient: ParecerDocument["patient"] }) {
-  return (
-    <header className="mb-7">
-      <div className="flex items-end justify-between border-b pb-3" style={{ borderColor: GOLD }}>
-        <div>
-          <div className="text-[19px] font-semibold leading-tight" style={{ color: WINE }}>Dra. Juliana Moreira</div>
-          <div className="text-[10.5px] uppercase tracking-[0.18em]" style={{ color: MUTED, fontFamily: "system-ui, sans-serif" }}>Nutricionista | CRN-9 22234</div>
-        </div>
-        <div className="text-center text-[11px] italic" style={{ color: WINE_SOFT }}>Nutrição Funcional e Saúde da Mulher</div>
-        <div className="text-right">
-          <div className="text-[10.5px] uppercase tracking-[0.18em]" style={{ color: WINE, fontFamily: "system-ui, sans-serif" }}>Parecer nutricional</div>
-          <div className="text-[11px]" style={{ color: MUTED }}>Data: {patient.evaluationDate}</div>
-        </div>
-      </div>
-    </header>
-  );
+  return <header className="-mx-12 -mt-8 mb-14 px-12 py-5 text-white" style={{ background: GREEN }}><div className="grid grid-cols-3 items-center gap-3"><div><div className="text-[13px] font-bold">Dra. Juliana Moreira</div><div className="mt-1 text-[9px]">Nutricionista | CRN-9 22234</div></div><div className="text-center text-[9px] font-semibold">Nutrição Funcional e Saúde da Mulher</div><div className="text-right"><div className="text-[9px] uppercase">Parecer Nutricional</div><div className="mt-1 text-[9px]">Data: {patient.evaluationDate}</div></div></div><div className="mt-4 h-px" style={{ background: GOLD }} /></header>;
 }
 
-function Block({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="mb-7" style={{ breakInside: "avoid" }}>
-      <h2 className="mb-3 text-[12px] font-semibold uppercase tracking-[0.16em]" style={{ color: WINE, fontFamily: "system-ui, sans-serif" }}>{title}</h2>
-      {children}
-    </section>
-  );
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return <section className="mb-7" style={{ breakInside: "avoid" }}><h2 className="mb-2 border-b-2 pb-1 text-[12px] font-bold uppercase" style={{ color: GREEN, borderColor: GREEN }}>{title}</h2>{children}</section>;
 }
 
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex gap-3 bg-white px-3 py-2">
-      <span className="w-40 shrink-0 text-[10.5px] uppercase tracking-wide" style={{ color: MUTED, fontFamily: "system-ui, sans-serif" }}>{label}</span>
-      <span className="text-[13px] font-medium">{value}</span>
-    </div>
-  );
+function Cell({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
+  return <td className={`border px-2 py-2 ${wide ? "w-[58%]" : ""}`} style={{ borderColor: LINE, background: label ? GREEN_SOFT : "white" }}><span className="font-semibold">{label}{label ? " " : ""}</span>{value}</td>;
 }
 
-function BigStat({ label, value, caption, accent = false }: { label: string; value: string; caption: string; accent?: boolean }) {
-  return (
-    <div className="overflow-hidden rounded-sm text-center" style={{ border: `1px solid ${SAND}` }}>
-      <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-white" style={{ background: accent ? WINE_SOFT : WINE, fontFamily: "system-ui, sans-serif" }}>{label}</div>
-      <div className="px-2 py-3" style={{ background: CREAM }}>
-        <div className="text-[22px] font-semibold leading-none" style={{ color: accent ? GOLD : WINE }}>{value}</div>
-        <div className="mt-1 text-[10.5px]" style={{ color: MUTED, fontFamily: "system-ui, sans-serif" }}>{caption}</div>
-      </div>
-    </div>
-  );
+function Stat({ label, value, caption, tone = "ok" }: { label: string; value: string; caption: string; tone?: "ok" | "attention" }) {
+  return <div className="border-r p-3 text-center last:border-r-0" style={{ borderColor: LINE, background: tone === "attention" ? "#FFF9E8" : GREEN_SOFT }}><div className="text-[9px]" style={{ color: GREEN_DARK }}>{label}</div><div className="mt-3 text-[18px] font-bold" style={{ color: tone === "attention" ? AMBER : GREEN }}>{value}</div><div className="mt-2 text-[9px] font-semibold" style={{ color: tone === "attention" ? AMBER : MUTED }}>{caption}</div></div>;
 }
 
 function Table({ rows, headers }: { rows: ParecerRow[]; headers: string[] }) {
-  return (
-    <table className="w-full border-collapse text-[12.5px]">
-      <thead>
-        <tr style={{ background: WINE, color: "#fff", fontFamily: "system-ui, sans-serif" }}>
-          {headers.map((header, index) => (
-            <th key={header} className={`px-3 py-2 text-[10.5px] font-semibold uppercase tracking-wider ${index === 1 ? "text-right" : "text-left"}`}>{header}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row, index) => (
-          <tr key={row.label} style={{ background: index % 2 ? CREAM : "transparent", color: row.calculated ? WINE_SOFT : INK }}>
-            <td className="border-b px-3 py-2 font-medium" style={{ borderColor: SAND }}>{row.label}</td>
-            <td className="border-b px-3 py-2 text-right font-semibold tabular-nums" style={{ borderColor: SAND }}>{row.value}</td>
-            <td className="border-b px-3 py-2 text-[12px]" style={{ borderColor: SAND, color: row.tone === "alto" ? "#9C3B2E" : undefined }}>{row.reference}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
+  return <table className="w-full border-collapse text-[10px]"><thead><tr style={{ background: GREEN, color: "white" }}>{headers.map((h) => <th key={h} className="border px-2 py-1.5 text-left font-semibold" style={{ borderColor: LINE }}>{h}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.label}-${index}`} style={{ background: row.calculated ? BLUE_SOFT : index % 2 ? "#F8FBF9" : GREEN_SOFT }}><td className="border px-2 py-1.5 font-semibold" style={{ borderColor: LINE, color: GREEN_DARK }}>{row.label}</td><td className="border px-2 py-1.5 text-center font-semibold tabular-nums" style={{ borderColor: LINE }}>{row.value}</td><td className="border px-2 py-1.5" style={{ borderColor: LINE, color: row.tone === "alto" ? ALERT : row.tone === "atencao" ? AMBER : INK }}>{row.reference}</td></tr>)}</tbody></table>;
 }
 
 function Gauge({ score }: { score: number }) {
-  const angle = -90 + (score / 100) * 180;
-  const arc = (from: number, to: number, color: string) => {
-    const rad = (deg: number) => ((deg - 180) * Math.PI) / 180;
-    const p = (deg: number) => `${100 + 78 * Math.cos(rad(deg))},${90 + 78 * Math.sin(rad(deg))}`;
-    return <path key={`${from}-${color}`} d={`M ${p(from)} A 78 78 0 0 1 ${p(to)}`} stroke={color} strokeWidth={16} fill="none" strokeLinecap="butt" />;
-  };
-  return (
-    <div className="flex flex-col items-center">
-      <svg viewBox="0 0 200 120" className="w-[280px]">
-        {arc(0, 45, "#9C3B2E")}
-        {arc(45, 90, "#C87941")}
-        {arc(90, 135, GOLD)}
-        {arc(135, 180, "#5C7A52")}
-        <line x1={100} y1={90} x2={100 + 62 * Math.cos(((angle - 90) * Math.PI) / 180)} y2={90 + 62 * Math.sin(((angle - 90) * Math.PI) / 180)} stroke={WINE} strokeWidth={3} strokeLinecap="round" />
-        <circle cx={100} cy={90} r={5} fill={WINE} />
-      </svg>
-      <div className="-mt-3 text-[32px] font-semibold leading-none" style={{ color: WINE }}>{score}</div>
-      <div className="text-[11px]" style={{ color: MUTED, fontFamily: "system-ui, sans-serif" }}>/ 100 pontos</div>
-    </div>
-  );
+  const clamped = Math.max(0, Math.min(100, score));
+  const angle = Math.PI + (clamped / 100) * Math.PI;
+  const x = 100 + 62 * Math.cos(angle); const y = 92 + 62 * Math.sin(angle);
+  return <div className="flex flex-col items-center"><svg viewBox="0 0 200 115" className="w-[260px]" aria-label={`Score de composição corporal ${score} de 100`}><path d="M25 92 A75 75 0 0 1 175 92" fill="none" stroke="#E24F43" strokeWidth="18" /><path d="M63 28 A75 75 0 0 1 137 28" fill="none" stroke="#F2C315" strokeWidth="18" /><path d="M137 28 A75 75 0 0 1 175 92" fill="none" stroke="#27985E" strokeWidth="18" /><line x1="100" y1="92" x2={x} y2={y} stroke="#252525" strokeWidth="3" /><circle cx="100" cy="92" r="6" fill="#252525" /></svg><div className="-mt-1 text-[28px] font-bold" style={{ color: GREEN }}>{score}</div><div className="text-[10px]" style={{ color: MUTED }}>/ 100 pontos</div></div>;
 }
 
 function Bar({ gauge }: { gauge: ParecerGauge }) {
   const pct = (value: number) => Math.max(0, Math.min(100, ((value - gauge.min) / (gauge.max - gauge.min)) * 100));
-  const inRange = gauge.value >= gauge.refMin && gauge.value <= gauge.refMax;
-  return (
-    <div>
-      <div className="mb-1 flex items-baseline justify-between text-[12px]">
-        <span className="font-medium">{gauge.label}</span>
-        <span className="font-semibold" style={{ color: inRange ? "#5C7A52" : WINE }}>{gauge.display}</span>
-      </div>
-      <div className="relative h-3 w-full rounded-full" style={{ background: SAND }}>
-        <div className="absolute inset-y-0 rounded-full" style={{ left: `${pct(gauge.refMin)}%`, width: `${pct(gauge.refMax) - pct(gauge.refMin)}%`, background: "#9BB08C" }} />
-        <div className="absolute -top-1 h-5 w-1 rounded-full" style={{ left: `calc(${pct(gauge.value)}% - 2px)`, background: WINE }} />
-      </div>
-      <div className="mt-1 text-[10px]" style={{ color: MUTED, fontFamily: "system-ui, sans-serif" }}>
-        Referência: {gauge.refMin} – {gauge.refMax}
-      </div>
-    </div>
-  );
+  const current = pct(gauge.value); const healthyStart = pct(gauge.refMin); const healthyEnd = pct(gauge.refMax); const inRange = gauge.value >= gauge.refMin && gauge.value <= gauge.refMax;
+  return <div className="grid grid-cols-[180px_1fr_70px] items-center gap-3"><div className="font-semibold">{gauge.label}</div><div><div className="relative h-5 overflow-visible rounded-full bg-[#D8D8D8]"><div className="absolute inset-y-0" style={{ left: `${healthyStart}%`, width: `${Math.max(3, healthyEnd - healthyStart)}%`, background: "#9BE0B9" }} /><div className="absolute top-1/2 size-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white" style={{ left: `${current}%`, background: inRange ? "#22B573" : ALERT }} /></div><div className="mt-1 text-center text-[8px]" style={{ color: MUTED }}>Ref: {gauge.refMin.toLocaleString("pt-BR")}-{gauge.refMax.toLocaleString("pt-BR")}</div></div><div className="font-semibold tabular-nums">{gauge.display}</div></div>;
 }
 
 function Footer({ page, name }: { page: number; name: string }) {
-  return (
-    <div className="mt-auto pt-6">
-      <div className="border-t pt-2 text-right text-[10.5px] font-medium" style={{ borderColor: GOLD, color: WINE }}>Página {page} | {name}</div>
-      <div className="mt-1 text-[9.5px]" style={{ color: MUTED, fontFamily: "system-ui, sans-serif" }}>Uso clínico exclusivo. Não substitui consulta médica. Válido somente com o prontuário completo da paciente.</div>
-    </div>
-  );
+  return <footer className="mt-auto pt-8"><div className="h-px" style={{ background: GOLD }} /><div className="mt-3 flex justify-between text-[8.5px]" style={{ color: MUTED }}><span>Uso clínico exclusivo. Não substitui consulta médica.</span><span className="font-semibold" style={{ color: GREEN }}>Página {page} | {name}</span></div></footer>;
 }
 
 function fmt(value: number | null, unit: string, digits = 1) {
-  if (value === null) return "—";
-  return `${value.toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits })}${unit ? ` ${unit}` : ""}`;
+  return value === null ? "—" : `${value.toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits })}${unit ? ` ${unit}` : ""}`;
 }
