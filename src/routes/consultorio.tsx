@@ -20,7 +20,9 @@ import {
   type MethodPhase,
 } from "@/modules/consultorio/method-store";
 
-export const Route = createFileRoute("/consultorio" as never)({
+// routeTree.gen.ts é regenerado pelo plugin durante o build ao detectar este arquivo.
+// @ts-expect-error a rota nova ainda não existe no routeTree versionado antes da geração.
+export const Route = createFileRoute("/consultorio")({
   head: () => ({ meta: [{ title: "Meu Consultório — Cach AI" }] }),
   component: ClinicOfficePage,
 });
