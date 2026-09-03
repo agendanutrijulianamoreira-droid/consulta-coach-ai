@@ -58,7 +58,7 @@ export function ConsultationHome() {
   const selectedPatient = patients.data?.find((patient) => patient.id === selectedPatientId) ?? null;
   const latestConsultation = patientConsultations.data?.[0] ?? null;
   const progress = useMemo(() => buildProgress(history.data, latestConsultation?.id ?? null), [history.data, latestConsultation?.id]);
-  const nextStep = FLOW.find((item) => !progress[item.section]) ?? FLOW[FLOW.length - 1];
+  const nextStep = FLOW.find((item) => !progress[item.section]) ?? FLOW[0]!;
   const completedCount = FLOW.filter((item) => progress[item.section]).length;
 
   const matches = useMemo(() => {
