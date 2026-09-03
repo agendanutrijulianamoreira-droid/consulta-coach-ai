@@ -1,14 +1,11 @@
 import { useMemo, useState, useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, FileText, Pencil, Plus, X } from "lucide-react";
-import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
+import { Activity, Pencil, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { PatientDialog } from "@/components/nutrios/patient-dialog";
-import { ConsultationWorkspace } from "@/components/nutrios/consultation-workspace";
+import { ClinicalModuleSection, type ClinicalSection } from "@/components/nutrios/clinical-module-section";
 import * as db from "@/lib/nutrios/repository";
 
 export type WorkspaceSection =
@@ -44,15 +41,16 @@ const SECTIONS: { id: WorkspaceSection; label: string }[] = [
   { id: "historico", label: "Histórico" },
 ];
 
-const CONSULTATION_STEP: Partial<Record<WorkspaceSection, number>> = {
-  consulta: 0,
-  anamnese: 1,
-  antropometria: 2,
-  calculos: 3,
-  recordatorio: 4,
-  diagnostico: 6,
-  plano: 7,
-};
+const CLINICAL_SECTIONS = new Set<WorkspaceSection>([
+  "consulta",
+  "anamnese",
+  "antropometria",
+  "calculos",
+  "recordatorio",
+  "diagnostico",
+  "plano",
+  "parecer",
+]);
 
 export function PatientWorkspaceDialog({
   open,
@@ -61,11 +59,9 @@ export function PatientWorkspaceDialog({
   initialSection = "perfil",
   onOpenChange,
 }: Props) {
-  const queryClient = useQueryClient();
   const [section, setSection] = useState<WorkspaceSection>(initialSection);
   const [consultationId, setConsultationId] = useState<string | null>(initialConsultationId ?? null);
   const [editing, setEditing] = useState(false);
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   const patient = useQuery({
     queryKey: ["patient", patientId],
@@ -79,10 +75,6 @@ export function PatientWorkspaceDialog({
   });
 
   const rows = useMemo(() => dossier.data?.consultations ?? [], [dossier.data?.consultations]);
-  const selectedConsultation = useMemo(
-    () => rows.find((item) => item.id === consultationId) ?? rows[0] ?? null,
-    [rows, consultationId],
-  );
 
   useEffect(() => {
     if (!open) return;
@@ -90,32 +82,12 @@ export function PatientWorkspaceDialog({
     setConsultationId(initialConsultationId ?? null);
   }, [open, patientId, initialConsultationId, initialSection]);
 
-  useEffect(() => {
-    const first = rows[0];
-    if (!open || consultationId || !first) return;
-    setConsultationId(first.id);
-  }, [open, rows, consultationId]);
-
-  const start = useMutation({
-    mutationFn: () => db.createConsultation(patientId!, date),
-    onSuccess: (consultation) => {
-      setConsultationId(consultation.id);
-      setSection("consulta");
-      void queryClient.invalidateQueries({ queryKey: ["patient-dossier", patientId] });
-      void queryClient.invalidateQueries({ queryKey: ["consultations"] });
-      void queryClient.invalidateQueries({ queryKey: ["consultation-dates"] });
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
-
   const selectSection = (next: WorkspaceSection) => {
     setSection(next);
-    const first = rows[0];
-    if (CONSULTATION_STEP[next] !== undefined && !consultationId && first) setConsultationId(first.id);
+    setConsultationId(null);
   };
 
   const p = patient.data;
-  const activeConsultationStep = CONSULTATION_STEP[section];
 
   return (
     <Dialog open={open && !!patientId} onOpenChange={onOpenChange}>
@@ -177,31 +149,16 @@ export function PatientWorkspaceDialog({
                   setConsultationId(id);
                   setSection("consulta");
                 }}
+                onNew={() => selectSection("consulta")}
               />
-            ) : section === "parecer" ? (
-              <Report
-                consultationId={selectedConsultation?.id ?? null}
-                report={selectedConsultation ? dossier.data?.reports[selectedConsultation.id] : undefined}
+            ) : CLINICAL_SECTIONS.has(section) && patientId ? (
+              <ClinicalModuleSection
+                key={`${patientId}-${section}-${consultationId ?? "list"}`}
+                patientId={patientId}
+                section={section as ClinicalSection}
+                initialConsultationId={consultationId}
               />
-            ) : selectedConsultation && activeConsultationStep !== undefined ? (
-              <ConsultationWorkspace
-                key={selectedConsultation.id}
-                consultationId={selectedConsultation.id}
-                activeStep={activeConsultationStep}
-                embedded
-                onOpenReport={() => {
-                  void queryClient.invalidateQueries({ queryKey: ["patient-dossier", patientId] });
-                  setSection("parecer");
-                }}
-              />
-            ) : (
-              <EmptyConsultation
-                date={date}
-                onDateChange={setDate}
-                onStart={() => start.mutate()}
-                pending={start.isPending}
-              />
-            )}
+            ) : null}
           </main>
         </div>
 
@@ -298,15 +255,23 @@ function History({
   rows,
   dossier,
   onOpen,
+  onNew,
 }: {
   rows: db.Consultation[];
   dossier: Awaited<ReturnType<typeof db.getPatientDossier>> | undefined;
   onOpen: (id: string) => void;
+  onNew: () => void;
 }) {
   return (
     <div className="mx-auto max-w-5xl px-6 py-7 lg:px-10 lg:py-9">
-      <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Histórico</p>
-      <h2 className="mt-1 text-xl font-semibold tracking-tight">Consultas anteriores</h2>
+      <div className="flex items-end justify-between gap-4 border-b border-border pb-5">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Histórico</p>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight">Linha do tempo clínica</h2>
+          <p className="mt-1 text-sm text-muted-foreground">O histórico é formado automaticamente por todos os registros e consultas do paciente.</p>
+        </div>
+        <Button size="sm" onClick={onNew}>Nova consulta</Button>
+      </div>
       <div className="mt-6 divide-y divide-border border-y border-border">
         {rows.length ? rows.map((consultation) => {
           const anthro = dossier?.anthro[consultation.id] ?? {};
@@ -324,36 +289,7 @@ function History({
               <span className="text-xs font-medium text-foreground">Abrir consulta</span>
             </button>
           );
-        }) : <p className="py-10 text-sm text-muted-foreground">Nenhuma consulta registrada.</p>}
-      </div>
-    </div>
-  );
-}
-
-function Report({ consultationId, report }: { consultationId: string | null; report?: string | null | undefined }) {
-  return (
-    <div className="mx-auto max-w-5xl px-6 py-7 lg:px-10 lg:py-9">
-      <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Parecer</p>
-      <div className="mt-1 flex items-center justify-between gap-4">
-        <h2 className="text-xl font-semibold tracking-tight">Parecer da consulta</h2>
-        {consultationId ? <Button asChild variant="secondary" size="sm"><a href={`/prontuario/${consultationId}`}><FileText /> Abrir versão completa</a></Button> : null}
-      </div>
-      {report ? <div className="mt-6 whitespace-pre-wrap text-sm leading-7">{report}</div> : <p className="mt-6 text-sm text-muted-foreground">Esta consulta ainda não possui parecer gerado.</p>}
-    </div>
-  );
-}
-
-function EmptyConsultation({ date, onDateChange, onStart, pending }: { date: string; onDateChange: (value: string) => void; onStart: () => void; pending: boolean }) {
-  return (
-    <div className="flex min-h-full items-center justify-center px-6 py-12">
-      <div className="w-full max-w-sm text-center">
-        <h2 className="text-lg font-semibold">Nenhuma consulta registrada</h2>
-        <p className="mt-2 text-sm text-muted-foreground">Registre a primeira consulta para começar o prontuário clínico.</p>
-        <div className="mx-auto mt-6 grid max-w-56 gap-1.5 text-left">
-          <Label htmlFor="workspace-consult-date" className="text-xs text-muted-foreground">Data da consulta</Label>
-          <Input id="workspace-consult-date" type="date" value={date} onChange={(event) => onDateChange(event.target.value)} />
-        </div>
-        <Button className="mt-3" onClick={onStart} disabled={pending}><Plus />{pending ? "Abrindo…" : "Iniciar consulta"}</Button>
+        }) : <p className="py-10 text-sm text-muted-foreground">Nenhum registro clínico ainda.</p>}
       </div>
     </div>
   );
