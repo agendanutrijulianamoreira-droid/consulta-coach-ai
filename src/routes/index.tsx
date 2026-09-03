@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Activity, ArrowRight, CalendarClock, ChevronDown, ChevronUp, Download, Pencil, Plus, Search, Trash2, Users } from "lucide-react";
+import { Activity, ArrowRight, CalendarClock, ChevronDown, ChevronUp, Download, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/nutrios/app-shell";
@@ -24,6 +24,7 @@ type SexFilter = "all" | "masculino" | "feminino";
 type PatientWithUpdatedAt = Patient & { updated_at?: string };
 
 function Home() {
+  const showDirectory = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("patients") === "all";
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -79,35 +80,39 @@ function Home() {
   };
 
   return (
-    <AppShell>
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-10">
-        <header className="flex flex-col justify-between gap-5 border-b border-border pb-6 sm:flex-row sm:items-end">
-          <div><p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Consultório</p><h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Pacientes cadastrados</h1><p className="mt-2 text-sm text-muted-foreground">Total de pacientes: {patients.data?.length ?? 0}</p></div>
-          <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={exportPatients}><Download /> Exportar pacientes</Button><Button onClick={() => { setEditing(null); setDialogOpen(true); }}><Plus /> Adicionar paciente</Button></div>
-        </header>
+    <AppShell hideHomeDashboard={showDirectory}>
+      {showDirectory ? (
+        <>
+          <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-10">
+            <header className="flex flex-col justify-between gap-5 border-b border-border pb-6 sm:flex-row sm:items-end">
+              <div><p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Consultório</p><h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Pacientes cadastrados</h1><p className="mt-2 text-sm text-muted-foreground">Total de pacientes: {patients.data?.length ?? 0}</p></div>
+              <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => window.location.assign("/")}>Voltar ao início</Button><Button variant="outline" onClick={exportPatients}><Download /> Exportar pacientes</Button><Button onClick={() => { setEditing(null); setDialogOpen(true); }}><Plus /> Adicionar paciente</Button></div>
+            </header>
 
-        <section aria-label="Volume de consultas" className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4"><Metric icon={<CalendarClock />} label="Hoje" value={stats.today} /><Metric icon={<CalendarClock />} label="Esta semana" value={stats.week} /><Metric icon={<CalendarClock />} label="Este mês" value={stats.month} /><Metric icon={<Activity />} label="Média mensal (12m)" value={stats.monthlyAverage} /></section>
+            <section aria-label="Volume de consultas" className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4"><Metric icon={<CalendarClock />} label="Hoje" value={stats.today} /><Metric icon={<CalendarClock />} label="Esta semana" value={stats.week} /><Metric icon={<CalendarClock />} label="Este mês" value={stats.month} /><Metric icon={<Activity />} label="Média mensal (12m)" value={stats.monthlyAverage} /></section>
 
-        <section className="mt-8" aria-labelledby="patients-heading">
-          <div className="flex gap-2"><div className="relative min-w-0 flex-1"><Search className="pointer-events-none absolute left-3 top-3 size-4 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Busque por nome, CPF, telefone, e-mail ou tag" className="pl-9" /></div><Button variant="outline" onClick={() => setFiltersOpen((value) => !value)}>{filtersOpen ? <ChevronUp /> : <ChevronDown />} {filtersOpen ? "Ocultar filtros" : "Exibir filtros"}</Button></div>
+            <section className="mt-8" aria-labelledby="patients-heading">
+              <div className="flex gap-2"><div className="relative min-w-0 flex-1"><Search className="pointer-events-none absolute left-3 top-3 size-4 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Busque por nome, CPF, telefone, e-mail ou tag" className="pl-9" /></div><Button variant="outline" onClick={() => setFiltersOpen((value) => !value)}>{filtersOpen ? <ChevronUp /> : <ChevronDown />} {filtersOpen ? "Ocultar filtros" : "Exibir filtros"}</Button></div>
 
-          {filtersOpen ? <div className="mt-3 space-y-2 rounded-lg border border-border bg-muted/20 p-3">
-            <FilterRow label="Data de modificação"><PeriodButtons value={modifiedPeriod} onChange={setModifiedPeriod} />{modifiedPeriod === "custom" ? <DateRange start={modifiedStart} end={modifiedEnd} onStart={setModifiedStart} onEnd={setModifiedEnd} /> : null}</FilterRow>
-            <FilterRow label="Data de criação"><PeriodButtons value={createdPeriod} onChange={setCreatedPeriod} />{createdPeriod === "custom" ? <DateRange start={createdStart} end={createdEnd} onStart={setCreatedStart} onEnd={setCreatedEnd} /> : null}</FilterRow>
-            <FilterRow label="Gênero do paciente"><ChoiceButton active={sexFilter === "all"} onClick={() => setSexFilter("all")}>Sem especificar</ChoiceButton><ChoiceButton active={sexFilter === "masculino"} onClick={() => setSexFilter("masculino")}>Masculino</ChoiceButton><ChoiceButton active={sexFilter === "feminino"} onClick={() => setSexFilter("feminino")}>Feminino</ChoiceButton></FilterRow>
-            <FilterRow label="Ordenar resultados por"><ChoiceButton active={sortMode === "modified"} onClick={() => setSortMode("modified")}>Data de modificação</ChoiceButton><ChoiceButton active={sortMode === "created"} onClick={() => setSortMode("created")}>Data de cadastro</ChoiceButton><ChoiceButton active={sortMode === "alpha"} onClick={() => setSortMode("alpha")}>Ordem alfabética</ChoiceButton></FilterRow>
-          </div> : null}
+              {filtersOpen ? <div className="mt-3 space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+                <FilterRow label="Data de modificação"><PeriodButtons value={modifiedPeriod} onChange={setModifiedPeriod} />{modifiedPeriod === "custom" ? <DateRange start={modifiedStart} end={modifiedEnd} onStart={setModifiedStart} onEnd={setModifiedEnd} /> : null}</FilterRow>
+                <FilterRow label="Data de criação"><PeriodButtons value={createdPeriod} onChange={setCreatedPeriod} />{createdPeriod === "custom" ? <DateRange start={createdStart} end={createdEnd} onStart={setCreatedStart} onEnd={setCreatedEnd} /> : null}</FilterRow>
+                <FilterRow label="Gênero do paciente"><ChoiceButton active={sexFilter === "all"} onClick={() => setSexFilter("all")}>Sem especificar</ChoiceButton><ChoiceButton active={sexFilter === "masculino"} onClick={() => setSexFilter("masculino")}>Masculino</ChoiceButton><ChoiceButton active={sexFilter === "feminino"} onClick={() => setSexFilter("feminino")}>Feminino</ChoiceButton></FilterRow>
+                <FilterRow label="Ordenar resultados por"><ChoiceButton active={sortMode === "modified"} onClick={() => setSortMode("modified")}>Data de modificação</ChoiceButton><ChoiceButton active={sortMode === "created"} onClick={() => setSortMode("created")}>Data de cadastro</ChoiceButton><ChoiceButton active={sortMode === "alpha"} onClick={() => setSortMode("alpha")}>Ordem alfabética</ChoiceButton></FilterRow>
+              </div> : null}
 
-          {allTags.length ? <div className="mt-3 flex flex-wrap gap-1.5"><Badge variant={tagFilter ? "outline" : "secondary"} className="cursor-pointer" onClick={() => setTagFilter(null)}>Todas as tags</Badge>{allTags.map((tag) => <Badge key={tag} variant={tagFilter === tag ? "secondary" : "outline"} className="cursor-pointer" onClick={() => setTagFilter(tagFilter === tag ? null : tag)}>{tag}</Badge>)}</div> : null}
+              {allTags.length ? <div className="mt-3 flex flex-wrap gap-1.5"><Badge variant={tagFilter ? "outline" : "secondary"} className="cursor-pointer" onClick={() => setTagFilter(null)}>Todas as tags</Badge>{allTags.map((tag) => <Badge key={tag} variant={tagFilter === tag ? "secondary" : "outline"} className="cursor-pointer" onClick={() => setTagFilter(tagFilter === tag ? null : tag)}>{tag}</Badge>)}</div> : null}
 
-          <div className="mt-4 mb-2 flex items-center justify-between"><div><h2 id="patients-heading" className="text-sm font-semibold">Resultados</h2><p className="mt-1 text-xs text-muted-foreground">{filteredPatients.length} paciente(s) encontrado(s).</p></div></div>
-          <div className="grid gap-2 lg:grid-cols-2">{filteredPatients.length ? filteredPatients.map((patient) => <div key={patient.id} className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-3 text-sm"><button type="button" className="min-w-0 flex-1 text-left" onClick={() => setWorkspace({ patientId: patient.id, section: "perfil" })}><span className="block truncate font-medium hover:underline">{patient.name}</span><span className="mt-0.5 block truncate text-xs text-muted-foreground">Modificado em {formatDateTime((patient as PatientWithUpdatedAt).updated_at ?? patient.created_at)}</span>{patient.tags?.length ? <span className="mt-1 flex flex-wrap gap-1">{patient.tags.map((tag) => <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>)}</span> : null}</button><div className="flex shrink-0 items-center gap-1"><Button size="icon" variant="ghost" aria-label={`Editar ${patient.name}`} onClick={() => { setEditing(patient); setDialogOpen(true); }}><Pencil /></Button><Button size="icon" variant="ghost" aria-label={`Excluir ${patient.name}`} onClick={() => setRemoving(patient)}><Trash2 /></Button><Button size="sm" variant="secondary" onClick={() => startConsultation.mutate(patient.id)} disabled={startConsultation.isPending}>Nova consulta <ArrowRight /></Button></div></div>) : <p className="col-span-full rounded-md border border-dashed border-border px-3 py-10 text-center text-sm text-muted-foreground">Nenhum paciente corresponde aos filtros.</p>}</div>
-        </section>
-      </div>
+              <div className="mt-4 mb-2 flex items-center justify-between"><div><h2 id="patients-heading" className="text-sm font-semibold">Resultados</h2><p className="mt-1 text-xs text-muted-foreground">{filteredPatients.length} paciente(s) encontrado(s).</p></div></div>
+              <div className="grid gap-2 lg:grid-cols-2">{filteredPatients.length ? filteredPatients.map((patient) => <div key={patient.id} className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-3 text-sm"><button type="button" className="min-w-0 flex-1 text-left" onClick={() => setWorkspace({ patientId: patient.id, section: "perfil" })}><span className="block truncate font-medium hover:underline">{patient.name}</span><span className="mt-0.5 block truncate text-xs text-muted-foreground">Modificado em {formatDateTime((patient as PatientWithUpdatedAt).updated_at ?? patient.created_at)}</span>{patient.tags?.length ? <span className="mt-1 flex flex-wrap gap-1">{patient.tags.map((tag) => <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>)}</span> : null}</button><div className="flex shrink-0 items-center gap-1"><Button size="icon" variant="ghost" aria-label={`Editar ${patient.name}`} onClick={() => { setEditing(patient); setDialogOpen(true); }}><Pencil /></Button><Button size="icon" variant="ghost" aria-label={`Excluir ${patient.name}`} onClick={() => setRemoving(patient)}><Trash2 /></Button><Button size="sm" variant="secondary" onClick={() => startConsultation.mutate(patient.id)} disabled={startConsultation.isPending}>Nova consulta <ArrowRight /></Button></div></div>) : <p className="col-span-full rounded-md border border-dashed border-border px-3 py-10 text-center text-sm text-muted-foreground">Nenhum paciente corresponde aos filtros.</p>}</div>
+            </section>
+          </div>
 
-      <PatientDialog open={dialogOpen} onOpenChange={setDialogOpen} patient={editing} onOpenWorkspace={(patientId, consultationId) => setWorkspace({ patientId, consultationId, section: consultationId ? "consulta" : "perfil" })} />
-      <PatientWorkspaceDialog open={!!workspace} patientId={workspace?.patientId ?? null} initialConsultationId={workspace?.consultationId} initialSection={workspace?.section} onOpenChange={(open) => { if (!open) setWorkspace(null); }} />
-      <AlertDialog open={!!removing} onOpenChange={(open) => !open && setRemoving(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir {removing?.name}?</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita. Pacientes com consultas registradas não podem ser excluídos.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={(event) => { event.preventDefault(); if (removing) removePatient.mutate(removing.id); }} disabled={removePatient.isPending}>{removePatient.isPending ? "Excluindo…" : "Excluir"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+          <PatientDialog open={dialogOpen} onOpenChange={setDialogOpen} patient={editing} onOpenWorkspace={(patientId, consultationId) => setWorkspace({ patientId, consultationId, section: consultationId ? "consulta" : "perfil" })} />
+          <PatientWorkspaceDialog open={!!workspace} patientId={workspace?.patientId ?? null} initialConsultationId={workspace?.consultationId} initialSection={workspace?.section} onOpenChange={(open) => { if (!open) setWorkspace(null); }} />
+          <AlertDialog open={!!removing} onOpenChange={(open) => !open && setRemoving(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir {removing?.name}?</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita. Pacientes com consultas registradas não podem ser excluídos.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={(event) => { event.preventDefault(); if (removing) removePatient.mutate(removing.id); }} disabled={removePatient.isPending}>{removePatient.isPending ? "Excluindo…" : "Excluir"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+        </>
+      ) : null}
     </AppShell>
   );
 }
