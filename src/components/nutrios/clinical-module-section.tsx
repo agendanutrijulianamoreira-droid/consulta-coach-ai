@@ -235,8 +235,9 @@ function summarize(history: historyDb.ClinicalModuleHistory, consultationId: str
   if (section === "calculos") {
     const calculation = history.calculations[consultationId];
     const energy = calculation?.energy ?? {};
-    const target = numberValue(energy.targetKcal) ?? calculation?.kcal;
-    const formula = typeof energy.formula === "string" ? energy.formula : null;
+    const target = numberValue(energy["targetKcal"]) ?? calculation?.kcal;
+    const formulaValue = energy["formula"];
+    const formula = typeof formulaValue === "string" ? formulaValue : null;
     return [target ? `${Math.round(target)} kcal/dia` : "Cálculo energético registrado", formula ? `Fórmula ${formula}` : ""].filter(Boolean).join(" · ");
   }
   if (section === "recordatorio") return `${history.recallCount[consultationId] ?? 0} refeições/horários registrados`;
