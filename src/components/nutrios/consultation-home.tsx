@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, UserRound } from "lucide-react";
 import { toast } from "sonner";
+import { ConsultationRegistrationDialog } from "@/components/nutrios/consultation-registration-dialog";
 import { PatientDialog } from "@/components/nutrios/patient-dialog";
 import { PatientWorkspaceDialog, type WorkspaceSection } from "@/components/nutrios/patient-workspace-dialog";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ export function ConsultationHome() {
   const [search, setSearch] = useState("");
   const [patientDialogOpen, setPatientDialogOpen] = useState(false);
   const [workspace, setWorkspace] = useState<WorkspaceState>(null);
+  const [consultationPatient, setConsultationPatient] = useState<db.Patient | null>(null);
 
   const patients = useQuery({ queryKey: ["patients"], queryFn: db.listPatients });
   const consultations = useQuery({ queryKey: ["consultations"], queryFn: db.listConsultations });
@@ -79,8 +81,9 @@ export function ConsultationHome() {
   const maxMonth = Math.max(1, ...monthlyHistory.map((item) => item.count));
 
   const startConsultation = useMutation({
-    mutationFn: (patientId: string) => db.createConsultation(patientId),
+    mutationFn: ({ patientId, consultationDate }: { patientId: string; consultationDate: string }) => db.createConsultation(patientId, consultationDate),
     onSuccess: async (consultation) => {
+      setConsultationPatient(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["consultations"] }),
         queryClient.invalidateQueries({ queryKey: ["consultation-dates"] }),
@@ -122,7 +125,7 @@ export function ConsultationHome() {
                     <span className="mt-0.5 block truncate text-xs text-muted-foreground">{lastAttendance ? `Último atendimento: ${formatDate(lastAttendance)}` : "Sem atendimento registrado"}</span>
                   </span>
                 </button>
-                <Button size="sm" variant="secondary" disabled={startConsultation.isPending} onClick={() => startConsultation.mutate(patient.id)}>Nova consulta</Button>
+                <Button size="sm" variant="secondary" disabled={startConsultation.isPending} onClick={() => setConsultationPatient(patient)}>Nova consulta</Button>
               </div>
             ))}
             {!patientRows.length ? <p className="py-8 text-center text-sm text-muted-foreground">Nenhum paciente encontrado.</p> : null}
@@ -148,6 +151,15 @@ export function ConsultationHome() {
         </div>
       </div>
 
+      <ConsultationRegistrationDialog
+        open={!!consultationPatient}
+        patientName={consultationPatient?.name}
+        isPending={startConsultation.isPending}
+        onOpenChange={(open) => { if (!open) setConsultationPatient(null); }}
+        onConfirm={(consultationDate) => {
+          if (consultationPatient) startConsultation.mutate({ patientId: consultationPatient.id, consultationDate });
+        }}
+      />
       <PatientDialog open={patientDialogOpen} onOpenChange={setPatientDialogOpen} onOpenWorkspace={(patientId, consultationId) => setWorkspace({ patientId, consultationId, section: consultationId ? "consulta" : "perfil" })} />
       <PatientWorkspaceDialog open={!!workspace} patientId={workspace?.patientId ?? null} initialConsultationId={workspace?.consultationId} initialSection={workspace?.section} onOpenChange={(open) => { if (!open) setWorkspace(null); }} />
     </section>
