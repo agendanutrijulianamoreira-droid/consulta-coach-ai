@@ -246,8 +246,8 @@ async function copyReport(sourceId: string, targetId: string) {
   const { data, error } = await supabase.from("records").select("sections, report").eq("consultation_id", sourceId).maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) return;
-  const sections = (data.sections ?? {}) as Record<string, unknown>;
-  const { [FAVORITE_SECTION_KEY]: _favorite, ...copiedSections } = sections;
+  const copiedSections = { ...((data.sections ?? {}) as Record<string, unknown>) };
+  delete copiedSections[FAVORITE_SECTION_KEY];
   const inserted = await supabase.from("records").insert(json({
     consultation_id: targetId,
     sections: copiedSections,
