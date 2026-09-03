@@ -7,7 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/lib/nutrios/use-session";
 
 /** Casca visual do app: navegação lateral discreta e alternância de tema. */
-export function AppShell({ children, title }: { children: ReactNode; title?: string }) {
+export function AppShell({ children, title, hideHomeDashboard = false }: { children: ReactNode; title?: string; hideHomeDashboard?: boolean }) {
   const [dark, setDark] = useState(false);
   const navigate = useNavigate();
   const isHome = useRouterState({ select: (state) => state.location.pathname === "/" });
@@ -83,7 +83,7 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
           </nav>
         </div>
         <div className="min-w-0 flex-1">
-          {isHome ? <ConsultationHome /> : null}
+          {isHome && !hideHomeDashboard ? <ConsultationHome /> : null}
           {children}
         </div>
       </main>
