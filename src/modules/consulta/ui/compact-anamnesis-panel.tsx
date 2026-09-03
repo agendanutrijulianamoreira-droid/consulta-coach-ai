@@ -42,6 +42,7 @@ const QUICK_KEYS = [
   "restricoes_alimentares",
   "dificuldades",
 ] satisfies AnamnesisKey[];
+const QUICK_KEY_SET = new Set<AnamnesisKey>(QUICK_KEYS);
 
 export function CompactAnamnesisPanel({
   consultationId,
@@ -246,7 +247,7 @@ export function CompactAnamnesisPanel({
         {showComplementary ? (
           <div className="border-t border-border p-3">
             {ANAMNESIS_SECTIONS.map((section) => {
-              const keys = section.fields.filter((key) => !QUICK_KEYS.includes(key));
+              const keys = section.fields.filter((key) => !QUICK_KEY_SET.has(key));
               if (!keys.length) return null;
               const isOpen = openSection === section.id;
               return (
