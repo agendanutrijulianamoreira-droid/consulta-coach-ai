@@ -70,10 +70,10 @@ export async function listRecentMealPlans(limit = 6): Promise<RecentMealPlan[]> 
 function asTotals(value: unknown) {
   const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
   return {
-    kcal: numberOrNull(source.kcal),
-    proteinG: numberOrNull(source.protein_g ?? source.proteinG),
-    carbG: numberOrNull(source.carb_g ?? source.carbG),
-    fatG: numberOrNull(source.fat_g ?? source.fatG),
+    kcal: numberOrNull(source["kcal"]),
+    proteinG: numberOrNull(source["protein_g"] ?? source["proteinG"]),
+    carbG: numberOrNull(source["carb_g"] ?? source["carbG"]),
+    fatG: numberOrNull(source["fat_g"] ?? source["fatG"]),
   };
 }
 
