@@ -13,17 +13,10 @@ export type ClinicalModuleKey =
   | "plano"
   | "parecer";
 
-type MealPlanBase = Database["public"]["Tables"]["meal_plans"];
 type DiagnosisBase = Database["public"]["Tables"]["diagnoses"];
 type ExtendedDatabase = Omit<Database, "public"> & {
   public: Omit<Database["public"], "Tables"> & {
-    Tables: Omit<Database["public"]["Tables"], "meal_plans" | "diagnoses"> & {
-      meal_plans: {
-        Row: MealPlanBase["Row"] & { is_favorite: boolean };
-        Insert: MealPlanBase["Insert"] & { is_favorite?: boolean };
-        Update: MealPlanBase["Update"] & { is_favorite?: boolean };
-        Relationships: MealPlanBase["Relationships"];
-      };
+    Tables: Omit<Database["public"]["Tables"], "diagnoses"> & {
       diagnoses: {
         Row: DiagnosisBase["Row"] & { reasoning: Json };
         Insert: DiagnosisBase["Insert"] & { reasoning?: Json };
@@ -36,6 +29,7 @@ type ExtendedDatabase = Omit<Database, "public"> & {
 
 const clinicalSupabase = supabase as unknown as SupabaseClient<ExtendedDatabase>;
 const json = (value: unknown) => value as never;
+const FAVORITE_SECTION_KEY = "meal_plan_favorite";
 
 export type ClinicalModuleHistory = {
   consultations: db.Consultation[];
@@ -79,14 +73,20 @@ export async function getClinicalModuleHistory(patientId: string): Promise<Clini
     supabase.from("conducts").select("consultation_id, kcal, energy").in("consultation_id", ids),
     supabase.from("food_recall_items").select("consultation_id, id").in("consultation_id", ids),
     clinicalSupabase.from("diagnoses").select("consultation_id, hypotheses, reasoning").in("consultation_id", ids),
-    clinicalSupabase.from("meal_plans").select("id, consultation_id, totals, is_favorite, created_at").in("consultation_id", ids).order("created_at", { ascending: false }),
-    supabase.from("records").select("consultation_id, report").in("consultation_id", ids),
+    supabase.from("meal_plans").select("id, consultation_id, totals, created_at").in("consultation_id", ids).order("created_at", { ascending: false }),
+    supabase.from("records").select("consultation_id, report, sections").in("consultation_id", ids),
   ]);
 
   for (const result of [segments, anamnesis, anthro, conducts, recall, diagnoses, plans, records]) {
     if (result.error) throw new Error(result.error.message);
   }
 
+  const favoriteByConsultation: Record<string, boolean> = {};
+  for (const row of records.data ?? []) {
+    const sections = (row.sections ?? {}) as Record<string, unknown>;
+    favoriteByConsultation[row.consultation_id] = sections[FAVORITE_SECTION_KEY] === "true";
+    if (row.report) empty.reports[row.consultation_id] = row.report;
+  }
   for (const row of segments.data ?? []) {
     empty.transcriptCount[row.consultation_id] = (empty.transcriptCount[row.consultation_id] ?? 0) + 1;
   }
@@ -128,21 +128,19 @@ export async function getClinicalModuleHistory(patientId: string): Promise<Clini
       protein_g: numberOrUndefined(totals["protein_g"]),
       carb_g: numberOrUndefined(totals["carb_g"]),
       fat_g: numberOrUndefined(totals["fat_g"]),
-      isFavorite: row.is_favorite,
+      isFavorite: favoriteByConsultation[row.consultation_id] ?? false,
     };
-  }
-  for (const row of records.data ?? []) {
-    if (row.report) empty.reports[row.consultation_id] = row.report;
   }
   return empty;
 }
 
-export async function toggleMealPlanFavorite(planId: string, isFavorite: boolean) {
-  const { error } = await clinicalSupabase
-    .from("meal_plans")
-    .update({ is_favorite: isFavorite })
-    .eq("id", planId);
-  if (error) throw new Error(error.message);
+export async function toggleMealPlanFavorite(consultationId: string, isFavorite: boolean) {
+  const current = await db.getRecord(consultationId);
+  const sections = {
+    ...(current.sections ?? {}),
+    [FAVORITE_SECTION_KEY]: isFavorite ? "true" : "false",
+  };
+  await db.saveRecord(consultationId, sections);
 }
 
 export async function createModuleRecord(patientId: string, consultationDate: string) {
@@ -237,10 +235,10 @@ async function copyDiagnosis(sourceId: string, targetId: string) {
 }
 
 async function copyPlan(sourceId: string, targetId: string) {
-  const { data, error } = await clinicalSupabase.from("meal_plans").select("meals, totals, shopping_list, recipes, rationale").eq("consultation_id", sourceId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+  const { data, error } = await supabase.from("meal_plans").select("meals, totals, shopping_list, recipes, rationale").eq("consultation_id", sourceId).order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) return;
-  const inserted = await clinicalSupabase.from("meal_plans").insert({ ...data, consultation_id: targetId, is_favorite: false });
+  const inserted = await supabase.from("meal_plans").insert({ ...data, consultation_id: targetId });
   if (inserted.error) throw new Error(inserted.error.message);
 }
 
@@ -248,7 +246,13 @@ async function copyReport(sourceId: string, targetId: string) {
   const { data, error } = await supabase.from("records").select("sections, report").eq("consultation_id", sourceId).maybeSingle();
   if (error) throw new Error(error.message);
   if (!data) return;
-  const inserted = await supabase.from("records").insert(json({ ...data, consultation_id: targetId }));
+  const sections = (data.sections ?? {}) as Record<string, unknown>;
+  const { [FAVORITE_SECTION_KEY]: _favorite, ...copiedSections } = sections;
+  const inserted = await supabase.from("records").insert(json({
+    consultation_id: targetId,
+    sections: copiedSections,
+    report: data.report,
+  }));
   if (inserted.error) throw new Error(inserted.error.message);
 }
 
