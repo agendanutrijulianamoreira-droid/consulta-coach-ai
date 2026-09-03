@@ -4,6 +4,7 @@ import { Activity, ArrowRight, CalendarClock, ChevronDown, ChevronUp, Download, 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/nutrios/app-shell";
+import { ConsultationRegistrationDialog } from "@/components/nutrios/consultation-registration-dialog";
 import { PatientDialog } from "@/components/nutrios/patient-dialog";
 import { PatientWorkspaceDialog, type WorkspaceSection } from "@/components/nutrios/patient-workspace-dialog";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ function Home() {
   const [removing, setRemoving] = useState<Patient | null>(null);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceState>(null);
+  const [consultationPatient, setConsultationPatient] = useState<Patient | null>(null);
   const patients = useQuery({ queryKey: ["patients"], queryFn: listPatients });
   const consultations = useQuery({ queryKey: ["consultations"], queryFn: listConsultations });
   const consultationDates = useQuery({ queryKey: ["consultation-dates"], queryFn: listConsultationDates });
@@ -69,7 +71,7 @@ function Home() {
   }, [patients.data, search, tagFilter, sexFilter, createdPeriod, modifiedPeriod, createdStart, createdEnd, modifiedStart, modifiedEnd, sortMode]);
 
   const removePatient = useMutation({ mutationFn: (id: string) => deletePatient(id), onSuccess: () => { setRemoving(null); void queryClient.invalidateQueries({ queryKey: ["patients"] }); toast.success("Paciente excluído."); }, onError: (error: Error) => toast.error(error.message) });
-  const startConsultation = useMutation({ mutationFn: (patientId: string) => createConsultation(patientId), onSuccess: (consultation) => { void queryClient.invalidateQueries({ queryKey: ["consultation-dates"] }); void queryClient.invalidateQueries({ queryKey: ["consultations"] }); setWorkspace({ patientId: consultation.patient_id, consultationId: consultation.id, section: "consulta" }); }, onError: (error: Error) => toast.error(error.message) });
+  const startConsultation = useMutation({ mutationFn: ({ patientId, consultationDate }: { patientId: string; consultationDate: string }) => createConsultation(patientId, consultationDate), onSuccess: (consultation) => { setConsultationPatient(null); void queryClient.invalidateQueries({ queryKey: ["consultation-dates"] }); void queryClient.invalidateQueries({ queryKey: ["consultations"] }); setWorkspace({ patientId: consultation.patient_id, consultationId: consultation.id, section: "consulta" }); }, onError: (error: Error) => toast.error(error.message) });
 
   const exportPatients = () => {
     const header = ["Nome", "CPF", "Telefone", "E-mail", "Sexo", "Nascimento", "Tags", "Criado em", "Modificado em"];
@@ -104,10 +106,19 @@ function Home() {
               {allTags.length ? <div className="mt-3 flex flex-wrap gap-1.5"><Badge variant={tagFilter ? "outline" : "secondary"} className="cursor-pointer" onClick={() => setTagFilter(null)}>Todas as tags</Badge>{allTags.map((tag) => <Badge key={tag} variant={tagFilter === tag ? "secondary" : "outline"} className="cursor-pointer" onClick={() => setTagFilter(tagFilter === tag ? null : tag)}>{tag}</Badge>)}</div> : null}
 
               <div className="mt-4 mb-2 flex items-center justify-between"><div><h2 id="patients-heading" className="text-sm font-semibold">Resultados</h2><p className="mt-1 text-xs text-muted-foreground">{filteredPatients.length} paciente(s) encontrado(s).</p></div></div>
-              <div className="grid gap-2 lg:grid-cols-2">{filteredPatients.length ? filteredPatients.map((patient) => <div key={patient.id} className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-3 text-sm"><button type="button" className="min-w-0 flex-1 text-left" onClick={() => setWorkspace({ patientId: patient.id, section: "perfil" })}><span className="block truncate font-medium hover:underline">{patient.name}</span><span className="mt-0.5 block truncate text-xs text-muted-foreground">Modificado em {formatDateTime((patient as PatientWithUpdatedAt).updated_at ?? patient.created_at)}</span>{patient.tags?.length ? <span className="mt-1 flex flex-wrap gap-1">{patient.tags.map((tag) => <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>)}</span> : null}</button><div className="flex shrink-0 items-center gap-1"><Button size="icon" variant="ghost" aria-label={`Editar ${patient.name}`} onClick={() => { setEditing(patient); setDialogOpen(true); }}><Pencil /></Button><Button size="icon" variant="ghost" aria-label={`Excluir ${patient.name}`} onClick={() => setRemoving(patient)}><Trash2 /></Button><Button size="sm" variant="secondary" onClick={() => startConsultation.mutate(patient.id)} disabled={startConsultation.isPending}>Nova consulta <ArrowRight /></Button></div></div>) : <p className="col-span-full rounded-md border border-dashed border-border px-3 py-10 text-center text-sm text-muted-foreground">Nenhum paciente corresponde aos filtros.</p>}</div>
+              <div className="grid gap-2 lg:grid-cols-2">{filteredPatients.length ? filteredPatients.map((patient) => <div key={patient.id} className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-3 text-sm"><button type="button" className="min-w-0 flex-1 text-left" onClick={() => setWorkspace({ patientId: patient.id, section: "perfil" })}><span className="block truncate font-medium hover:underline">{patient.name}</span><span className="mt-0.5 block truncate text-xs text-muted-foreground">Modificado em {formatDateTime((patient as PatientWithUpdatedAt).updated_at ?? patient.created_at)}</span>{patient.tags?.length ? <span className="mt-1 flex flex-wrap gap-1">{patient.tags.map((tag) => <Badge key={tag} variant="outline" className="text-[10px]">{tag}</Badge>)}</span> : null}</button><div className="flex shrink-0 items-center gap-1"><Button size="icon" variant="ghost" aria-label={`Editar ${patient.name}`} onClick={() => { setEditing(patient); setDialogOpen(true); }}><Pencil /></Button><Button size="icon" variant="ghost" aria-label={`Excluir ${patient.name}`} onClick={() => setRemoving(patient)}><Trash2 /></Button><Button size="sm" variant="secondary" onClick={() => setConsultationPatient(patient)} disabled={startConsultation.isPending}>Nova consulta <ArrowRight /></Button></div></div>) : <p className="col-span-full rounded-md border border-dashed border-border px-3 py-10 text-center text-sm text-muted-foreground">Nenhum paciente corresponde aos filtros.</p>}</div>
             </section>
           </div>
 
+          <ConsultationRegistrationDialog
+            open={!!consultationPatient}
+            patientName={consultationPatient?.name}
+            isPending={startConsultation.isPending}
+            onOpenChange={(open) => { if (!open) setConsultationPatient(null); }}
+            onConfirm={(consultationDate) => {
+              if (consultationPatient) startConsultation.mutate({ patientId: consultationPatient.id, consultationDate });
+            }}
+          />
           <PatientDialog open={dialogOpen} onOpenChange={setDialogOpen} patient={editing} onOpenWorkspace={(patientId, consultationId) => setWorkspace({ patientId, consultationId, section: consultationId ? "consulta" : "perfil" })} />
           <PatientWorkspaceDialog open={!!workspace} patientId={workspace?.patientId ?? null} initialConsultationId={workspace?.consultationId} initialSection={workspace?.section} onOpenChange={(open) => { if (!open) setWorkspace(null); }} />
           <AlertDialog open={!!removing} onOpenChange={(open) => !open && setRemoving(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir {removing?.name}?</AlertDialogTitle><AlertDialogDescription>Esta ação não pode ser desfeita. Pacientes com consultas registradas não podem ser excluídos.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={(event) => { event.preventDefault(); if (removing) removePatient.mutate(removing.id); }} disabled={removePatient.isPending}>{removePatient.isPending ? "Excluindo…" : "Excluir"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
