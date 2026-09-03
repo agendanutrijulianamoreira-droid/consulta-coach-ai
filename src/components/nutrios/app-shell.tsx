@@ -1,6 +1,7 @@
-import { Link, useNavigate } from "@tanstack/react-router";
-import { LogOut, Moon, Star, Sun, Users } from "lucide-react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Home, LogOut, Moon, Star, Sun } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { ConsultationHome } from "@/components/nutrios/consultation-home";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/lib/nutrios/use-session";
@@ -9,6 +10,7 @@ import { useSession } from "@/lib/nutrios/use-session";
 export function AppShell({ children, title }: { children: ReactNode; title?: string }) {
   const [dark, setDark] = useState(false);
   const navigate = useNavigate();
+  const isHome = useRouterState({ select: (state) => state.location.pathname === "/" });
   const { session, loading } = useSession();
 
   useEffect(() => {
@@ -45,7 +47,7 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
           Cach AI
         </Link>
         <nav aria-label="Navegação principal" className="flex flex-col gap-1 text-sm">
-          <NavItem to="/" icon={<Users className="size-3.5" />} label="Pacientes" />
+          <NavItem to="/" icon={<Home className="size-3.5" />} label="Início" />
           <NavItem to="/alimentos" icon={<Star className="size-3.5" />} label="Favoritos" />
         </nav>
         <div className="mt-auto space-y-1 border-t border-border pt-3">
@@ -76,11 +78,14 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
         ) : null}
         <div className="border-b border-border px-3 py-2 md:hidden print:hidden">
           <nav aria-label="Navegação mobile" className="grid grid-cols-2 gap-1 text-xs">
-            <NavItem to="/" icon={<Users className="size-3.5" />} label="Pacientes" />
+            <NavItem to="/" icon={<Home className="size-3.5" />} label="Início" />
             <NavItem to="/alimentos" icon={<Star className="size-3.5" />} label="Favoritos" />
           </nav>
         </div>
-        <div className="min-w-0 flex-1">{children}</div>
+        <div className="min-w-0 flex-1">
+          {isHome ? <ConsultationHome /> : null}
+          {children}
+        </div>
       </main>
     </div>
   );
