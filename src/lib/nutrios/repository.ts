@@ -382,15 +382,27 @@ export async function getMealPlan(consultationId: string) {
 }
 
 export async function saveMealPlan(consultationId: string, plan: MealPlan, rationale: string) {
-  await supabase.from("meal_plans").delete().eq("consultation_id", consultationId);
-  const { error } = await supabase.from("meal_plans").insert({
-    consultation_id: consultationId,
+  const payload = {
     meals: json(plan.meals),
     totals: json(plan.totals),
     shopping_list: json(plan.shopping_list),
     recipes: json(plan.recipes),
     rationale,
-  });
+  };
+  const existing = await supabase
+    .from("meal_plans")
+    .select("id")
+    .eq("consultation_id", consultationId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existing.error) throw new Error(existing.error.message);
+  if (existing.data?.id) {
+    const { error } = await supabase.from("meal_plans").update(payload).eq("id", existing.data.id);
+    if (error) throw new Error(error.message);
+    return;
+  }
+  const { error } = await supabase.from("meal_plans").insert({ consultation_id: consultationId, ...payload });
   if (error) throw new Error(error.message);
 }
 
