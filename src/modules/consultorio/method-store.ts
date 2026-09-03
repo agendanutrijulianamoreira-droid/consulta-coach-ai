@@ -2,7 +2,7 @@ export type MethodStatus = "draft" | "active" | "archived";
 
 export type MethodMaterial = {
   id: string;
-  type: "food" | "recipe" | "meal" | "plan";
+  type: "food" | "recipe" | "meal" | "plan" | "material";
   label: string;
 };
 
