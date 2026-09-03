@@ -46,7 +46,7 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
         </Link>
         <nav aria-label="Navegação principal" className="flex flex-col gap-1 text-sm">
           <NavItem to="/" icon={<Users className="size-3.5" />} label="Pacientes" />
-          <NavItem to="/favoritos" icon={<Star className="size-3.5" />} label="Favoritos" />
+          <NavItem to="/alimentos" icon={<Star className="size-3.5" />} label="Favoritos" />
         </nav>
         <div className="mt-auto space-y-1 border-t border-border pt-3">
           <p className="truncate px-2 text-[11px] text-muted-foreground" title={session.user.email ?? ""}>
@@ -77,7 +77,7 @@ export function AppShell({ children, title }: { children: ReactNode; title?: str
         <div className="border-b border-border px-3 py-2 md:hidden print:hidden">
           <nav aria-label="Navegação mobile" className="grid grid-cols-2 gap-1 text-xs">
             <NavItem to="/" icon={<Users className="size-3.5" />} label="Pacientes" />
-            <NavItem to="/favoritos" icon={<Star className="size-3.5" />} label="Favoritos" />
+            <NavItem to="/alimentos" icon={<Star className="size-3.5" />} label="Favoritos" />
           </nav>
         </div>
         <div className="min-w-0 flex-1">{children}</div>
