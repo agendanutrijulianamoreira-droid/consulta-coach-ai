@@ -13,7 +13,13 @@ describe("lab extraction response parsing", () => {
   });
 
   test("rejects an extraction with zero laboratory results", () => {
-    expect(() => parseLabExtraction('{"collection_date":null,"laboratory_name":null,"results":[]}')).toThrow("Nenhum resultado laboratorial");
+    let message = "";
+    try {
+      parseLabExtraction('{"collection_date":null,"laboratory_name":null,"results":[]}');
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    expect(message.includes("Nenhum resultado laboratorial")).toBe(true);
   });
 
   test("keeps valid extracted results", () => {
@@ -31,7 +37,7 @@ describe("lab extraction response parsing", () => {
         reference_text: null,
       }],
     }));
-    expect(parsed.results).toHaveLength(1);
+    expect(parsed.results.length).toBe(1);
     expect(parsed.results[0]?.value).toBe(97);
   });
 });
