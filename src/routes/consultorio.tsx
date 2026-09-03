@@ -19,6 +19,7 @@ import {
   type MethodMaterial,
   type MethodPhase,
 } from "@/modules/consultorio/method-store";
+import { listFavoriteMaterials, materialCategoryLabel, type FavoriteMaterial } from "@/modules/favoritos/material-store";
 
 // routeTree.gen.ts é regenerado pelo plugin durante o build ao detectar este arquivo.
 // @ts-expect-error a rota nova ainda não existe no routeTree versionado antes da geração.
@@ -55,6 +56,7 @@ function ClinicOfficePage() {
 function MethodWorkspace() {
   const [methods, setMethods] = useState<ClinicMethod[]>([]);
   const [draft, setDraft] = useState<ClinicMethod | null>(null);
+  const [favoriteMaterials, setFavoriteMaterials] = useState<FavoriteMaterial[]>(() => listFavoriteMaterials());
   const foods = useQuery({ queryKey: ["foods"], queryFn: db.listFoods });
   const recipes = useQuery({ queryKey: ["recipes"], queryFn: db.listRecipes });
   const meals = useQuery({ queryKey: ["favorite-meals"], queryFn: listFavoriteMeals });
@@ -66,12 +68,26 @@ function MethodWorkspace() {
     setDraft(stored[0] ? structuredClone(stored[0]) : null);
   }, []);
 
+  useEffect(() => {
+    const refreshMaterials = () => setFavoriteMaterials(listFavoriteMaterials());
+    refreshMaterials();
+    window.addEventListener("focus", refreshMaterials);
+    window.addEventListener("storage", refreshMaterials);
+    return () => {
+      window.removeEventListener("focus", refreshMaterials);
+      window.removeEventListener("storage", refreshMaterials);
+    };
+  }, []);
+
   const materials = useMemo<MethodMaterial[]>(() => [
     ...(foods.data ?? []).map((item) => ({ id: item.id, type: "food" as const, label: item.name })),
     ...(recipes.data ?? []).map((item) => ({ id: item.id, type: "recipe" as const, label: item.name })),
     ...(meals.data ?? []).map((item) => ({ id: item.key, type: "meal" as const, label: item.label })),
     ...(plans.data ?? []).map((item) => ({ id: item.id, type: "plan" as const, label: `Plano · ${item.patientName}` })),
-  ], [foods.data, meals.data, plans.data, recipes.data]);
+    ...favoriteMaterials
+      .filter((item) => item.status === "active" && item.title.trim())
+      .map((item) => ({ id: item.id, type: "material" as const, label: `${materialCategoryLabel(item.category)} · ${item.title}` })),
+  ], [favoriteMaterials, foods.data, meals.data, plans.data, recipes.data]);
 
   const create = () => setDraft(newMethod());
   const save = () => {
@@ -170,4 +186,4 @@ function EmptyMethod({ onCreate }: { onCreate: () => void }) { return <div class
 function ComingSoon({ tab }: { tab: Exclude<OfficeTab, "metodo"> }) { const product = tab === "produtos"; return <div className="rounded-lg border border-dashed border-border p-10"><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Estrutura reservada</p><h2 className="mt-1 text-lg font-semibold">{product ? "Escada de produtos e precificação" : "Protocolos financeiros"}</h2><p className="mt-2 max-w-xl text-sm text-muted-foreground">{product ? "Aqui vamos organizar ofertas, níveis de acompanhamento, custos, margem e preços." : "Aqui vamos organizar condições, recorrência, descontos e regras financeiras."}</p></div>; }
 function Tab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) { return <Button type="button" variant={active ? "secondary" : "ghost"} className="rounded-b-none" onClick={onClick}>{children}</Button>; }
 function statusLabel(status: ClinicMethod["status"]) { return status === "active" ? "Ativo" : status === "archived" ? "Arquivado" : "Em construção"; }
-function materialTypeLabel(type: MethodMaterial["type"]) { return type === "food" ? "alimento" : type === "recipe" ? "receita" : type === "meal" ? "refeição" : "plano"; }
+function materialTypeLabel(type: MethodMaterial["type"]) { return type === "food" ? "alimento" : type === "recipe" ? "receita" : type === "meal" ? "refeição" : type === "plan" ? "plano" : "material"; }
