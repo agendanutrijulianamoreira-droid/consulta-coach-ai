@@ -31,15 +31,18 @@ describe("bedridden weight estimation", () => {
 });
 
 describe("bidirectional bioimpedance", () => {
-  test("percent fat fills fat mass", () => {
+  test("percent fat fills fat mass and derives lean mass", () => {
     const result = applyAnthropometryInput({ peso: "80" }, "bia_gordura_pct", "30");
     expect(result["bia_massa_gorda"]).toBe("24");
+    expect(result["bia_mlg"]).toBe("56");
+    expect(result["bia_mlg_source"]).toBe("derived_weight_minus_fat_mass");
     expect(result["bia_fat_source"]).toBe("percent");
   });
 
-  test("fat mass fills fat percent", () => {
+  test("fat mass fills fat percent and derives lean mass", () => {
     const result = applyAnthropometryInput({ peso: "80" }, "bia_massa_gorda", "24");
     expect(result["bia_gordura_pct"]).toBe("30");
+    expect(result["bia_mlg"]).toBe("56");
     expect(result["bia_fat_source"]).toBe("mass");
   });
 
@@ -53,10 +56,11 @@ describe("bidirectional bioimpedance", () => {
     expect(result["bia_musculo_pct"]).toBe("35");
   });
 
-  test("weight changes preserve the last entered source", () => {
+  test("weight changes preserve the last entered source and refresh lean mass", () => {
     const withFatMass = applyAnthropometryInput({ peso: "80" }, "bia_massa_gorda", "24");
     const afterWeight = applyAnthropometryInput(withFatMass, "peso", "60");
     expect(afterWeight["bia_massa_gorda"]).toBe("24");
     expect(afterWeight["bia_gordura_pct"]).toBe("40");
+    expect(afterWeight["bia_mlg"]).toBe("36");
   });
 });
