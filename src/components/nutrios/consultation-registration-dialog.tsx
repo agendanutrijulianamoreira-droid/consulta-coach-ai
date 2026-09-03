@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 
 type Props = {
   open: boolean;
-  patientName?: string | null;
+  patientName?: string | null | undefined;
   isPending?: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (consultationDate: string) => void;
