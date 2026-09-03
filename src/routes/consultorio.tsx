@@ -7,8 +7,7 @@ import { AppShell } from "@/components/nutrios/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { listFavoriteMeals, listFavoritePlans } from "@/lib/nutrios/favorites-repository";
-import * as db from "@/lib/nutrios/repository";
+import { listRecipes } from "@/lib/nutrios/repository";
 import {
   listMethods,
   newMethod,
@@ -57,15 +56,12 @@ function MethodWorkspace() {
   const [methods, setMethods] = useState<ClinicMethod[]>([]);
   const [draft, setDraft] = useState<ClinicMethod | null>(null);
   const [favoriteMaterials, setFavoriteMaterials] = useState<FavoriteMaterial[]>(() => listFavoriteMaterials());
-  const foods = useQuery({ queryKey: ["foods"], queryFn: db.listFoods });
-  const recipes = useQuery({ queryKey: ["recipes"], queryFn: db.listRecipes });
-  const meals = useQuery({ queryKey: ["favorite-meals"], queryFn: listFavoriteMeals });
-  const plans = useQuery({ queryKey: ["favorite-plans"], queryFn: listFavoritePlans });
+  const recipes = useQuery({ queryKey: ["recipes"], queryFn: listRecipes });
 
   useEffect(() => {
     const stored = listMethods();
     setMethods(stored);
-    setDraft(stored[0] ? structuredClone(stored[0]) : null);
+    setDraft(newMethod());
   }, []);
 
   useEffect(() => {
@@ -80,14 +76,11 @@ function MethodWorkspace() {
   }, []);
 
   const materials = useMemo<MethodMaterial[]>(() => [
-    ...(foods.data ?? []).map((item) => ({ id: item.id, type: "food" as const, label: item.name })),
     ...(recipes.data ?? []).map((item) => ({ id: item.id, type: "recipe" as const, label: item.name })),
-    ...(meals.data ?? []).map((item) => ({ id: item.key, type: "meal" as const, label: item.label })),
-    ...(plans.data ?? []).map((item) => ({ id: item.id, type: "plan" as const, label: `Plano · ${item.patientName}` })),
     ...favoriteMaterials
       .filter((item) => item.status === "active" && item.title.trim())
       .map((item) => ({ id: item.id, type: "material" as const, label: `${materialCategoryLabel(item.category)} · ${item.title}` })),
-  ], [favoriteMaterials, foods.data, meals.data, plans.data, recipes.data]);
+  ], [favoriteMaterials, recipes.data]);
 
   const create = () => setDraft(newMethod());
   const save = () => {
@@ -98,8 +91,8 @@ function MethodWorkspace() {
     }
     const next = saveMethod({ ...draft, name: draft.name.trim() });
     setMethods(next);
-    setDraft(structuredClone(next.find((item) => item.id === draft.id) ?? draft));
-    toast.success("Método salvo.");
+    setDraft(newMethod());
+    toast.success("Método salvo. Um novo cadastro já está pronto ao lado.");
   };
   const remove = () => {
     if (!draft) return;
@@ -148,6 +141,7 @@ function MethodWorkspace() {
 function PhaseEditor({ phase, index, total, materials, onChange, onMove, onRemove }: { phase: MethodPhase; index: number; total: number; materials: MethodMaterial[]; onChange: (phase: MethodPhase) => void; onMove: (direction: -1 | 1) => void; onRemove: () => void }) {
   const [goal, setGoal] = useState("");
   const [search, setSearch] = useState("");
+  const [isMaterialPickerOpen, setIsMaterialPickerOpen] = useState(false);
   const filtered = materials.filter((item) => item.label.toLowerCase().includes(search.toLowerCase())).slice(0, 24);
   const addGoal = () => {
     const value = goal.trim();
@@ -165,7 +159,7 @@ function PhaseEditor({ phase, index, total, materials, onChange, onMove, onRemov
     <label className="mt-4 block space-y-1.5 text-xs text-muted-foreground">Objetivo da fase<Textarea value={phase.objective} onChange={(event) => onChange({ ...phase, objective: event.target.value })} placeholder="O que precisa estar resolvido antes de avançar?" /></label>
     <div className="mt-4 grid gap-5 xl:grid-cols-2">
       <div><p className="text-xs font-medium">Metas</p><div className="mt-2 flex gap-2"><Input value={goal} onChange={(event) => setGoal(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addGoal(); } }} placeholder="Ex.: atingir 2 L de água/dia" /><Button type="button" variant="outline" onClick={addGoal}><Plus /></Button></div><div className="mt-2 space-y-1">{phase.goals.map((item, goalIndex) => <div key={`${item}-${goalIndex}`} className="flex items-center justify-between rounded-md bg-muted/40 px-3 py-2 text-sm"><span>{item}</span><Button type="button" variant="ghost" size="icon" className="size-7" onClick={() => onChange({ ...phase, goals: phase.goals.filter((_, current) => current !== goalIndex) })}><Trash2 /></Button></div>)}{!phase.goals.length ? <p className="text-xs text-muted-foreground">Nenhuma meta definida.</p> : null}</div></div>
-      <div><div className="flex items-center justify-between"><p className="text-xs font-medium">Materiais dos Favoritos</p><span className="text-[11px] text-muted-foreground">{phase.materials.length} selecionado{phase.materials.length === 1 ? "" : "s"}</span></div><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar nos favoritos" className="mt-2" /><div className="mt-2 max-h-56 overflow-auto rounded-md border border-border">{filtered.map((material) => { const active = phase.materials.some((item) => item.id === material.id && item.type === material.type); return <button key={`${material.type}-${material.id}`} type="button" onClick={() => toggleMaterial(material)} className={`flex w-full items-center justify-between border-b border-border px-3 py-2 text-left text-sm last:border-b-0 ${active ? "bg-accent" : "hover:bg-muted/40"}`}><span className="truncate">{material.label}</span><span className="text-[10px] uppercase text-muted-foreground">{materialTypeLabel(material.type)}</span></button>; })}{!filtered.length ? <p className="px-3 py-5 text-center text-xs text-muted-foreground">Nenhum favorito encontrado.</p> : null}</div>{phase.materials.length ? <div className="mt-2 flex flex-wrap gap-1.5">{phase.materials.map((material) => <button key={`${material.type}-${material.id}`} type="button" onClick={() => toggleMaterial(material)} className="rounded-full border border-border px-2 py-1 text-[11px] text-muted-foreground">{material.label} ×</button>)}</div> : null}</div>
+      <div><div className="flex items-center justify-between"><p className="text-xs font-medium">Receitas e materiais</p><span className="text-[11px] text-muted-foreground">{phase.materials.length} selecionado{phase.materials.length === 1 ? "" : "s"}</span></div>{phase.materials.length ? <div className="mt-2 flex flex-wrap gap-1.5">{phase.materials.map((material) => <button key={`${material.type}-${material.id}`} type="button" onClick={() => toggleMaterial(material)} className="rounded-full border border-border px-2 py-1 text-[11px] text-muted-foreground">{material.label} ×</button>)}</div> : <p className="mt-2 text-xs text-muted-foreground">Nenhuma receita ou material selecionado.</p>}<Button type="button" variant="outline" className="mt-3 w-full justify-start" onClick={() => setIsMaterialPickerOpen((open) => !open)}><Plus /> {isMaterialPickerOpen ? "Fechar seleção" : "Adicionar receitas e materiais"}</Button>{isMaterialPickerOpen ? <div className="mt-2"><Input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Escreva para buscar receitas e materiais" /><div className="mt-2 max-h-56 overflow-auto rounded-md border border-border">{filtered.map((material) => { const active = phase.materials.some((item) => item.id === material.id && item.type === material.type); return <button key={`${material.type}-${material.id}`} type="button" onClick={() => toggleMaterial(material)} className={`flex w-full items-center justify-between border-b border-border px-3 py-2 text-left text-sm last:border-b-0 ${active ? "bg-accent" : "hover:bg-muted/40"}`}><span className="truncate">{material.label}</span><span className="text-[10px] uppercase text-muted-foreground">{materialTypeLabel(material.type)}</span></button>; })}{!filtered.length ? <p className="px-3 py-5 text-center text-xs text-muted-foreground">Nenhuma receita ou material encontrado.</p> : null}</div></div> : null}</div>
     </div>
   </section>;
 }
@@ -186,4 +180,4 @@ function EmptyMethod({ onCreate }: { onCreate: () => void }) { return <div class
 function ComingSoon({ tab }: { tab: Exclude<OfficeTab, "metodo"> }) { const product = tab === "produtos"; return <div className="rounded-lg border border-dashed border-border p-10"><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Estrutura reservada</p><h2 className="mt-1 text-lg font-semibold">{product ? "Escada de produtos e precificação" : "Protocolos financeiros"}</h2><p className="mt-2 max-w-xl text-sm text-muted-foreground">{product ? "Aqui vamos organizar ofertas, níveis de acompanhamento, custos, margem e preços." : "Aqui vamos organizar condições, recorrência, descontos e regras financeiras."}</p></div>; }
 function Tab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) { return <Button type="button" variant={active ? "secondary" : "ghost"} className="rounded-b-none" onClick={onClick}>{children}</Button>; }
 function statusLabel(status: ClinicMethod["status"]) { return status === "active" ? "Ativo" : status === "archived" ? "Arquivado" : "Em construção"; }
-function materialTypeLabel(type: MethodMaterial["type"]) { return type === "food" ? "alimento" : type === "recipe" ? "receita" : type === "meal" ? "refeição" : type === "plan" ? "plano" : "material"; }
+function materialTypeLabel(type: MethodMaterial["type"]) { return type === "recipe" ? "receita" : "material"; }
