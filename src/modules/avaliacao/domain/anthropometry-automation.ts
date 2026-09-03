@@ -45,12 +45,31 @@ export function estimateBedriddenWeight(data: AnthroData, profile: PatientProfil
 }
 
 /**
+ * Calcula a massa livre de gordura da bioimpedância a partir do peso e da
+ * massa gorda. O valor é sempre derivado, nunca tratado como medida primária.
+ */
+export function deriveBioimpedanceLeanMass(data: AnthroData): AnthroData {
+  const next = { ...data };
+  const weight = num(next["peso"]);
+  const fatMass = num(next["bia_massa_gorda"]);
+  if (weight !== null && weight > 0 && fatMass !== null && fatMass >= 0 && fatMass < weight) {
+    next["bia_mlg"] = asInput(weight - fatMass);
+    next["bia_mlg_source"] = "derived_weight_minus_fat_mass";
+  } else {
+    next["bia_mlg"] = "";
+    next["bia_mlg_source"] = "";
+  }
+  return next;
+}
+
+/**
  * Mantém pares de bioimpedância sincronizados. O último campo digitado é a
  * fonte e o complementar é derivado. Quando o peso muda, recalcula somente o
  * lado derivado, preservando o dado efetivamente informado pelo equipamento.
+ * Massa livre de gordura é sempre derivada de peso - massa gorda.
  */
 export function applyAnthropometryInput(data: AnthroData, key: string, value: string): AnthroData {
-  const next: AnthroData = { ...data, [key]: value };
+  let next: AnthroData = { ...data, [key]: value };
   const weight = key === "peso" ? num(value) : num(next["peso"]);
 
   if (key === "bia_gordura_pct") {
@@ -91,6 +110,7 @@ export function applyAnthropometryInput(data: AnthroData, key: string, value: st
     }
   }
 
+  next = deriveBioimpedanceLeanMass(next);
   return next;
 }
 
