@@ -81,7 +81,7 @@ export function ClinicalModuleSection({ patientId, section, initialConsultationI
   });
 
   const favorite = useMutation({
-    mutationFn: ({ planId, value }: { planId: string; value: boolean }) => historyDb.toggleMealPlanFavorite(planId, value),
+    mutationFn: ({ consultationId, value }: { consultationId: string; value: boolean }) => historyDb.toggleMealPlanFavorite(consultationId, value),
     onSuccess: async () => {
       await refresh();
     },
@@ -187,7 +187,7 @@ export function ClinicalModuleSection({ patientId, section, initialConsultationI
                     <Button size="sm" variant="ghost" onClick={() => { setSelectedId(consultation.id); setMode("editor"); }}>Abrir</Button>
                     <Button size="sm" variant="ghost" disabled={duplicate.isPending} onClick={() => duplicate.mutate(consultation.id)}><Copy /> Duplicar</Button>
                     {section === "plano" && plan ? (
-                      <Button size="sm" variant="ghost" disabled={favorite.isPending} onClick={() => favorite.mutate({ planId: plan.id, value: !plan.isFavorite })}>
+                      <Button size="sm" variant="ghost" disabled={favorite.isPending} onClick={() => favorite.mutate({ consultationId: consultation.id, value: !plan.isFavorite })}>
                         <Star className={plan.isFavorite ? "fill-current" : ""} />{plan.isFavorite ? "Desfavoritar" : "Favoritar"}
                       </Button>
                     ) : null}
