@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/lib/nutrios/use-session";
 
-/** Casca visual do app: navegação lateral discreta e alternância de tema. */
+/** Casca visual do app; permite ocultar o dashboard da Home quando o diretório completo está aberto. */
 export function AppShell({ children, title, hideHomeDashboard = false }: { children: ReactNode; title?: string; hideHomeDashboard?: boolean }) {
   const [dark, setDark] = useState(false);
   const navigate = useNavigate();
