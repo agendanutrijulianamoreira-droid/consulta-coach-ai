@@ -20,8 +20,8 @@ export type FavoriteMeal = {
   items: FavoriteMealItem[];
   totals: Record<string, number>;
   savedAt: string;
-  patientName?: string;
-  consultationDate?: string;
+  patientName?: string | undefined;
+  consultationDate?: string | undefined;
 };
 
 export type FavoritePlan = {
@@ -59,19 +59,14 @@ export async function listFavoritePlans(): Promise<FavoritePlan[]> {
       .select("id, consultation_id, meals, totals, rationale, created_at")
       .in("consultation_id", favoriteConsultationIds)
       .order("created_at", { ascending: false }),
-    supabase
-      .from("consultations")
-      .select("id, patient_id, consultation_date")
-      .in("id", favoriteConsultationIds),
+    supabase.from("consultations").select("id, patient_id, consultation_date").in("id", favoriteConsultationIds),
   ]);
   if (plansResult.error) throw new Error(plansResult.error.message);
   if (consultationsResult.error) throw new Error(consultationsResult.error.message);
 
   const latestPlanByConsultation = new Map<string, (typeof plansResult.data)[number]>();
   for (const plan of plansResult.data ?? []) {
-    if (!latestPlanByConsultation.has(plan.consultation_id)) {
-      latestPlanByConsultation.set(plan.consultation_id, plan);
-    }
+    if (!latestPlanByConsultation.has(plan.consultation_id)) latestPlanByConsultation.set(plan.consultation_id, plan);
   }
 
   const consultations = consultationsResult.data ?? [];
@@ -108,22 +103,10 @@ export async function listFavoriteMeals(): Promise<FavoriteMeal[]> {
   const meals: FavoriteMeal[] = [];
   for (const row of records.data ?? []) {
     const sections = (row.sections ?? {}) as Record<string, unknown>;
-    const saved = sections[FAVORITE_MEALS_KEY];
-    if (!Array.isArray(saved)) continue;
+    const saved = parseFavoriteMeals(sections[FAVORITE_MEALS_KEY]);
     for (const item of saved) {
-      if (!item || typeof item !== "object") continue;
-      const meal = item as Partial<FavoriteMeal>;
-      if (!meal.key || !meal.label || !meal.sourcePlanId) continue;
-      meals.push({
-        key: meal.key,
-        sourcePlanId: meal.sourcePlanId,
-        sourceConsultationId: meal.sourceConsultationId ?? row.consultation_id,
-        slot: meal.slot ?? "refeicao",
-        label: meal.label,
-        items: Array.isArray(meal.items) ? meal.items : [],
-        totals: meal.totals ?? {},
-        savedAt: meal.savedAt ?? "",
-      });
+      if (!item.key || !item.label || !item.sourcePlanId) continue;
+      meals.push({ ...item, sourceConsultationId: item.sourceConsultationId || row.consultation_id });
     }
   }
 
@@ -156,10 +139,8 @@ export async function listFavoriteMeals(): Promise<FavoriteMeal[]> {
 
 export async function saveFavoriteMeal(plan: FavoritePlan, meal: FavoritePlan["meals"][number]) {
   const record = await db.getRecord(plan.consultationId);
-  const sections = { ...(record.sections ?? {}) } as Record<string, unknown>;
-  const current = Array.isArray(sections[FAVORITE_MEALS_KEY])
-    ? [...(sections[FAVORITE_MEALS_KEY] as unknown[])]
-    : [];
+  const sections = { ...(record.sections ?? {}) };
+  const current = parseFavoriteMeals(sections[FAVORITE_MEALS_KEY]);
   const key = `${plan.id}:${meal.slot}`;
   const nextMeal: FavoriteMeal = {
     key,
@@ -171,25 +152,43 @@ export async function saveFavoriteMeal(plan: FavoritePlan, meal: FavoritePlan["m
     totals: meal.totals,
     savedAt: new Date().toISOString(),
   };
-  const withoutExisting = current.filter((item) => {
-    if (!item || typeof item !== "object") return true;
-    return (item as { key?: unknown }).key !== key;
-  });
-  sections[FAVORITE_MEALS_KEY] = [...withoutExisting, nextMeal];
+  sections[FAVORITE_MEALS_KEY] = JSON.stringify([...current.filter((item) => item.key !== key), nextMeal]);
   await db.saveRecord(plan.consultationId, sections);
 }
 
 export async function removeFavoriteMeal(meal: FavoriteMeal) {
   const record = await db.getRecord(meal.sourceConsultationId);
-  const sections = { ...(record.sections ?? {}) } as Record<string, unknown>;
-  const current = Array.isArray(sections[FAVORITE_MEALS_KEY])
-    ? (sections[FAVORITE_MEALS_KEY] as unknown[])
-    : [];
-  sections[FAVORITE_MEALS_KEY] = current.filter((item) => {
-    if (!item || typeof item !== "object") return true;
-    return (item as { key?: unknown }).key !== meal.key;
-  });
+  const sections = { ...(record.sections ?? {}) };
+  const current = parseFavoriteMeals(sections[FAVORITE_MEALS_KEY]);
+  sections[FAVORITE_MEALS_KEY] = JSON.stringify(current.filter((item) => item.key !== meal.key));
   await db.saveRecord(meal.sourceConsultationId, sections);
+}
+
+function parseFavoriteMeals(value: unknown): FavoriteMeal[] {
+  let parsed: unknown = value;
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value) as unknown;
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const meal = item as Partial<FavoriteMeal>;
+    if (!meal.key || !meal.sourcePlanId || !meal.label) return [];
+    return [{
+      key: meal.key,
+      sourcePlanId: meal.sourcePlanId,
+      sourceConsultationId: meal.sourceConsultationId ?? "",
+      slot: meal.slot ?? "refeicao",
+      label: meal.label,
+      items: Array.isArray(meal.items) ? meal.items : [],
+      totals: meal.totals ?? {},
+      savedAt: meal.savedAt ?? "",
+    }];
+  });
 }
 
 function normalizeMeals(value: unknown): FavoritePlan["meals"] {
