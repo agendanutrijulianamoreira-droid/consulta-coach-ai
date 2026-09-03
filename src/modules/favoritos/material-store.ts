@@ -1,5 +1,6 @@
 export type MaterialCategory = "lamina" | "orientacao" | "guia" | "ebook";
 export type MaterialStatus = "active" | "archived";
+export type MaterialFileStorage = "none" | "local" | "supabase";
 
 export type FavoriteMaterial = {
   id: string;
@@ -10,6 +11,10 @@ export type FavoriteMaterial = {
   content: string;
   link: string;
   fileName: string;
+  fileType: string;
+  fileSize: number;
+  fileStorage: MaterialFileStorage;
+  filePath: string;
   status: MaterialStatus;
   createdAt: string;
   updatedAt: string;
@@ -30,9 +35,35 @@ export function newFavoriteMaterial(category: MaterialCategory = "orientacao"): 
     content: "",
     link: "",
     fileName: "",
+    fileType: "",
+    fileSize: 0,
+    fileStorage: "none",
+    filePath: "",
     status: "active",
     createdAt: now,
     updatedAt: now,
+  };
+}
+
+function normalizeMaterial(value: Partial<FavoriteMaterial>): FavoriteMaterial | null {
+  if (!value.id || !value.category) return null;
+  const now = new Date().toISOString();
+  return {
+    id: value.id,
+    title: value.title ?? "",
+    category: value.category,
+    description: value.description ?? "",
+    tags: Array.isArray(value.tags) ? value.tags : [],
+    content: value.content ?? "",
+    link: value.link ?? "",
+    fileName: value.fileName ?? "",
+    fileType: value.fileType ?? "",
+    fileSize: typeof value.fileSize === "number" ? value.fileSize : 0,
+    fileStorage: value.fileStorage ?? (value.fileName ? "local" : "none"),
+    filePath: value.filePath ?? "",
+    status: value.status ?? "active",
+    createdAt: value.createdAt ?? now,
+    updatedAt: value.updatedAt ?? value.createdAt ?? now,
   };
 }
 
@@ -41,8 +72,9 @@ export function listFavoriteMaterials(): FavoriteMaterial[] {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as FavoriteMaterial[];
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = JSON.parse(raw) as Partial<FavoriteMaterial>[];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map(normalizeMaterial).filter((item): item is FavoriteMaterial => item !== null);
   } catch {
     return [];
   }
