@@ -47,10 +47,10 @@ export type ClinicalModuleHistory = {
   diagnoses: Record<string, { hypotheses: number; priorities: number }>;
   plans: Record<string, {
     id: string;
-    kcal?: number;
-    protein_g?: number;
-    carb_g?: number;
-    fat_g?: number;
+    kcal?: number | undefined;
+    protein_g?: number | undefined;
+    carb_g?: number | undefined;
+    fat_g?: number | undefined;
     isFavorite: boolean;
   }>;
   reports: Record<string, string>;
@@ -112,7 +112,8 @@ export async function getClinicalModuleHistory(patientId: string): Promise<Clini
   }
   for (const row of diagnoses.data ?? []) {
     const reasoning = (row.reasoning ?? {}) as Record<string, unknown>;
-    const priorities = Array.isArray(reasoning.priorities) ? reasoning.priorities.length : 0;
+    const priorityItems = reasoning["priorities"];
+    const priorities = Array.isArray(priorityItems) ? priorityItems.length : 0;
     empty.diagnoses[row.consultation_id] = {
       hypotheses: Array.isArray(row.hypotheses) ? row.hypotheses.length : 0,
       priorities,
@@ -123,10 +124,10 @@ export async function getClinicalModuleHistory(patientId: string): Promise<Clini
     const totals = (row.totals ?? {}) as Record<string, unknown>;
     empty.plans[row.consultation_id] = {
       id: row.id,
-      kcal: numberOrUndefined(totals.kcal),
-      protein_g: numberOrUndefined(totals.protein_g),
-      carb_g: numberOrUndefined(totals.carb_g),
-      fat_g: numberOrUndefined(totals.fat_g),
+      kcal: numberOrUndefined(totals["kcal"]),
+      protein_g: numberOrUndefined(totals["protein_g"]),
+      carb_g: numberOrUndefined(totals["carb_g"]),
+      fat_g: numberOrUndefined(totals["fat_g"]),
       isFavorite: row.is_favorite,
     };
   }
