@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { extractResponseText, parseLabExtraction, type RawLabExtraction } from "./lab-extraction-response";
 
 const ENDPOINT = "https://ai.gateway.lovable.dev/v1/responses";
 const MODEL = "openai/gpt-5.6-sol";
@@ -36,21 +37,6 @@ const labSchema = {
   },
 } as const;
 
-type Extraction = {
-  collection_date: string | null;
-  laboratory_name: string | null;
-  results: {
-    analyte_name: string;
-    analyte_code: string;
-    value: number | null;
-    value_text: string | null;
-    unit: string | null;
-    reference_min: number | null;
-    reference_max: number | null;
-    reference_text: string | null;
-  }[];
-};
-
 const instructions = `Você extrai resultados de exames laboratoriais para revisão por uma nutricionista.
 REGRAS OBRIGATÓRIAS:
 - transcreva somente resultados realmente visíveis ou ditos;
@@ -78,14 +64,21 @@ export const extractLabsFromFile = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const dataUrl = `data:${data.mimeType};base64,${data.fileBase64}`;
     const content = data.mimeType === "application/pdf"
-      ? [{ type: "input_text", text: "Extraia todos os resultados laboratoriais deste PDF." }, { type: "input_file", filename: data.filename, file_data: dataUrl }]
-      : [{ type: "input_text", text: "Extraia todos os resultados laboratoriais desta imagem." }, { type: "input_image", image_url: dataUrl, detail: "high" }];
+      ? [
+          { type: "input_text", text: "Leia o PDF inteiro e extraia todos os resultados laboratoriais visíveis, inclusive em múltiplas páginas." },
+          { type: "input_file", filename: data.filename, file_data: dataUrl },
+        ]
+      : [
+          { type: "input_text", text: "Extraia todos os resultados laboratoriais visíveis desta imagem." },
+          { type: "input_image", image_url: dataUrl, detail: "high" },
+        ];
     return callLabExtraction(content);
   });
 
-async function callLabExtraction(content: Record<string, unknown>[]): Promise<Extraction> {
+async function callLabExtraction(content: Record<string, unknown>[]): Promise<RawLabExtraction> {
   const apiKey = process.env["LOVABLE_API_KEY"];
-  if (!apiKey) throw new Error("LOVABLE_API_KEY ausente");
+  if (!apiKey) throw new Error("A integração de IA para leitura de exames não está configurada no servidor.");
+
   const response = await fetch(ENDPOINT, {
     method: "POST",
     headers: {
@@ -97,46 +90,30 @@ async function callLabExtraction(content: Record<string, unknown>[]): Promise<Ex
       model: MODEL,
       instructions,
       input: [{ role: "user", content }],
-      stream: true,
       reasoning: { effort: "low", summary: "auto" },
       text: { format: { type: "json_schema", name: labSchema.name, strict: true, schema: labSchema.schema } },
     }),
   });
-  if (!response.ok || !response.body) {
+
+  if (!response.ok) {
     const detail = await response.text().catch(() => "");
     if (response.status === 429) throw new Error("Limite de uso da IA atingido. Tente novamente em instantes.");
     if (response.status === 402) throw new Error("Créditos de IA esgotados no workspace.");
-    throw new Error(`Não foi possível ler o exame (${response.status}): ${detail.slice(0, 250)}`);
+    if (response.status === 413) throw new Error("O arquivo é grande demais para ser processado. Divida o PDF ou envie as páginas como imagens.");
+    throw new Error(`Não foi possível processar o exame (${response.status}). ${detail.slice(0, 220)}`.trim());
   }
 
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let text = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      if (!line.startsWith("data:")) continue;
-      const payload = line.slice(5).trim();
-      if (!payload || payload === "[DONE]") continue;
-      try {
-        const event = JSON.parse(payload) as { type?: string; delta?: string; response?: { output_text?: string } };
-        if (event.type === "response.output_text.delta" && typeof event.delta === "string") text += event.delta;
-        else if (event.type === "response.completed" && !text && event.response?.output_text) text = event.response.output_text;
-      } catch {
-        // Evento SSE incompleto: a próxima iteração continua a leitura.
-      }
-    }
-  }
-
+  let payload: unknown;
   try {
-    const parsed = JSON.parse(text) as Extraction;
-    return { ...parsed, results: parsed.results.filter((result) => result.analyte_name.trim()) };
+    payload = await response.json();
   } catch {
-    throw new Error("A leitura do exame não retornou uma estrutura válida. Tente uma imagem mais nítida ou digite os valores.");
+    throw new Error("A IA respondeu em um formato inesperado ao ler o exame.");
   }
+
+  const text = extractResponseText((payload ?? {}) as { output_text?: unknown; output?: unknown });
+  if (!text.trim()) {
+    throw new Error("A leitura do arquivo terminou sem retornar resultados. Tente novamente ou envie imagens das páginas do laudo.");
+  }
+
+  return parseLabExtraction(text);
 }
