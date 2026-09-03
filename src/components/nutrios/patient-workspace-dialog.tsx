@@ -1,11 +1,13 @@
 import { useMemo, useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Activity, Pencil, X } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Activity, ArrowLeft, FileText, Pencil, Plus, X } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { PatientDialog } from "@/components/nutrios/patient-dialog";
 import { ClinicalModuleSection, type ClinicalSection } from "@/components/nutrios/clinical-module-section";
+import { ConsultationWorkspace } from "@/components/nutrios/consultation-workspace";
 import * as db from "@/lib/nutrios/repository";
 
 export type WorkspaceSection =
@@ -15,6 +17,7 @@ export type WorkspaceSection =
   | "antropometria"
   | "calculos"
   | "recordatorio"
+  | "exames"
   | "diagnostico"
   | "plano"
   | "parecer"
@@ -35,6 +38,7 @@ const SECTIONS: { id: WorkspaceSection; label: string }[] = [
   { id: "antropometria", label: "Antropometria" },
   { id: "calculos", label: "Cálculos" },
   { id: "recordatorio", label: "Recordatório" },
+  { id: "exames", label: "Exames" },
   { id: "diagnostico", label: "Diagnóstico" },
   { id: "plano", label: "Plano alimentar" },
   { id: "parecer", label: "Parecer" },
@@ -151,6 +155,13 @@ export function PatientWorkspaceDialog({
                 }}
                 onNew={() => selectSection("consulta")}
               />
+            ) : section === "exames" && patientId ? (
+              <ExamsSection
+                patientId={patientId}
+                rows={rows}
+                consultationId={consultationId}
+                onOpen={setConsultationId}
+              />
             ) : CLINICAL_SECTIONS.has(section) && patientId ? (
               <ClinicalModuleSection
                 key={`${patientId}-${section}-${consultationId ?? "list"}`}
@@ -165,6 +176,78 @@ export function PatientWorkspaceDialog({
         <PatientDialog open={editing} onOpenChange={setEditing} patient={p ?? null} />
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ExamsSection({
+  patientId,
+  rows,
+  consultationId,
+  onOpen,
+}: {
+  patientId: string;
+  rows: db.Consultation[];
+  consultationId: string | null;
+  onOpen: (id: string | null) => void;
+}) {
+  const create = useMutation({
+    mutationFn: () => db.createConsultation(patientId, new Date().toISOString().slice(0, 10)),
+    onSuccess: (consultation) => onOpen(consultation.id),
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  if (consultationId) {
+    return (
+      <div>
+        <div className="border-b border-border px-6 py-3">
+          <Button type="button" variant="ghost" size="sm" onClick={() => onOpen(null)}>
+            <ArrowLeft /> Voltar para exames
+          </Button>
+        </div>
+        <ConsultationWorkspace
+          key={`exames-${consultationId}`}
+          consultationId={consultationId}
+          activeStep={5}
+          embedded
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-5xl px-6 py-7 lg:px-10 lg:py-9">
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-5">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Registros</p>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight">Exames</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Acesse os exames laboratoriais de cada consulta e acompanhe a evolução no módulo de exames.</p>
+        </div>
+        <Button size="sm" disabled={create.isPending} onClick={() => create.mutate()}>
+          <Plus /> {create.isPending ? "Abrindo…" : "Novo exame"}
+        </Button>
+      </div>
+
+      {rows.length ? (
+        <div className="mt-6 divide-y divide-border border-y border-border">
+          {rows.map((consultation) => (
+            <div key={consultation.id} className="grid gap-3 py-4 sm:grid-cols-[170px_1fr_auto] sm:items-center">
+              <span className="text-sm font-medium">{formatDate(consultation.consultation_date ?? consultation.created_at)}</span>
+              <span className="text-xs text-muted-foreground">Exames vinculados a esta consulta</span>
+              <Button type="button" size="sm" variant="ghost" onClick={() => onOpen(consultation.id)}>
+                <FileText /> Abrir exames
+              </Button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex min-h-[340px] flex-col items-center justify-center text-center">
+          <div className="rounded-full border border-border p-4"><FileText className="size-7 text-muted-foreground" /></div>
+          <h3 className="mt-4 text-lg font-semibold">Nenhum registro de exames</h3>
+          <p className="mt-1 text-sm text-muted-foreground">Crie o primeiro registro de exames para este paciente.</p>
+          <Button className="mt-5" disabled={create.isPending} onClick={() => create.mutate()}><Plus /> Novo exame</Button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -204,10 +287,11 @@ function Profile({
           </div>
           <Activity className="size-4 text-muted-foreground" />
         </div>
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
           <FlowButton label="Consulta" onClick={() => onOpenSection("consulta")} />
           <FlowButton label="Anamnese" onClick={() => onOpenSection("anamnese")} />
           <FlowButton label="Antropometria" onClick={() => onOpenSection("antropometria")} />
+          <FlowButton label="Exames" onClick={() => onOpenSection("exames")} />
           <FlowButton label="Plano alimentar" onClick={() => onOpenSection("plano")} />
         </div>
       </section>
