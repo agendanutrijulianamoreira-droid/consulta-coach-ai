@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Apple, BookOpen } from "lucide-react";
+import { Apple, BookOpen, NotebookTabs, Utensils } from "lucide-react";
 import { useState } from "react";
 import { AppShell } from "@/components/nutrios/app-shell";
 import { FoodLibrary } from "@/components/nutrios/food-library";
+import { FavoriteMealsLibrary, FavoritePlansLibrary } from "@/components/nutrios/favorites-meals-plans";
 import { RecipeLibrary } from "@/components/nutrios/recipe-library";
 import { Button } from "@/components/ui/button";
 
@@ -12,14 +13,14 @@ export const Route = createFileRoute("/alimentos")({
       { title: "Favoritos — Cach AI" },
       {
         name: "description",
-        content: "Biblioteca clínica reutilizável de alimentos e receitas do Cach AI.",
+        content: "Biblioteca clínica reutilizável de alimentos, receitas, refeições e planos alimentares do Cach AI.",
       },
     ],
   }),
   component: FavoritesPage,
 });
 
-type FavoriteTab = "alimentos" | "receitas";
+type FavoriteTab = "alimentos" | "receitas" | "refeicoes" | "planos";
 
 function FavoritesPage() {
   const [tab, setTab] = useState<FavoriteTab>("alimentos");
@@ -28,38 +29,58 @@ function FavoritesPage() {
     <AppShell title="Favoritos">
       <div className="border-b border-border px-4 pt-6 sm:px-6">
         <div className="mx-auto max-w-7xl">
-          <div className="max-w-2xl">
+          <div className="max-w-3xl">
             <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Biblioteca clínica</p>
             <h1 className="mt-1 text-xl font-semibold tracking-tight">Favoritos</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Centralize alimentos e receitas reutilizáveis para montar planos alimentares com mais rapidez.
+              Sua biblioteca reutilizável para montar planos com mais rapidez: alimentos, receitas, refeições completas e planos alimentares.
             </p>
           </div>
 
-          <nav className="mt-5 flex gap-1" aria-label="Categorias de favoritos">
-            <Button
-              type="button"
-              variant={tab === "alimentos" ? "secondary" : "ghost"}
-              className="rounded-b-none"
-              onClick={() => setTab("alimentos")}
-            >
+          <nav className="mt-5 flex flex-wrap gap-1" aria-label="Categorias de favoritos">
+            <TabButton active={tab === "alimentos"} onClick={() => setTab("alimentos")}>
               <Apple /> Alimentos
-            </Button>
-            <Button
-              type="button"
-              variant={tab === "receitas" ? "secondary" : "ghost"}
-              className="rounded-b-none"
-              onClick={() => setTab("receitas")}
-            >
+            </TabButton>
+            <TabButton active={tab === "receitas"} onClick={() => setTab("receitas")}>
               <BookOpen /> Receitas
-            </Button>
+            </TabButton>
+            <TabButton active={tab === "refeicoes"} onClick={() => setTab("refeicoes")}>
+              <Utensils /> Refeições
+            </TabButton>
+            <TabButton active={tab === "planos"} onClick={() => setTab("planos")}>
+              <NotebookTabs /> Planos alimentares
+            </TabButton>
           </nav>
         </div>
       </div>
 
       <div className="mx-auto w-full max-w-7xl">
-        {tab === "alimentos" ? <FoodLibrary /> : <RecipeLibrary />}
+        {tab === "alimentos" ? <FoodLibrary /> : null}
+        {tab === "receitas" ? <RecipeLibrary /> : null}
+        {tab === "refeicoes" ? <FavoriteMealsLibrary /> : null}
+        {tab === "planos" ? <FavoritePlansLibrary /> : null}
       </div>
     </AppShell>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Button
+      type="button"
+      variant={active ? "secondary" : "ghost"}
+      className="rounded-b-none"
+      onClick={onClick}
+    >
+      {children}
+    </Button>
   );
 }
