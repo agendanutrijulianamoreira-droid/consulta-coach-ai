@@ -39,7 +39,6 @@ export function FavoriteMaterialsLibrary() {
 
   useEffect(() => {
     let active = true;
-    setPendingFile(null);
     if (!draft?.fileName || draft.fileStorage !== "local") {
       setFileAvailable(false);
       return () => { active = false; };
@@ -48,7 +47,7 @@ export function FavoriteMaterialsLibrary() {
       .then((available) => { if (active) setFileAvailable(available); })
       .catch(() => { if (active) setFileAvailable(false); });
     return () => { active = false; };
-  }, [draft?.id, draft?.fileName, draft?.fileStorage]);
+  }, [draft?.id]);
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
