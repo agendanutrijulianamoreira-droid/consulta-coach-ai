@@ -2,7 +2,7 @@ export type MethodStatus = "draft" | "active" | "archived";
 
 export type MethodMaterial = {
   id: string;
-  type: "food" | "recipe" | "meal" | "plan" | "material";
+  type: "recipe" | "material";
   label: string;
 };
 
@@ -57,7 +57,7 @@ export function listMethods(): ClinicMethod[] {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as ClinicMethod[];
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? parsed.map(normalizeMethod) : [];
   } catch {
     return [];
   }
@@ -65,13 +65,27 @@ export function listMethods(): ClinicMethod[] {
 
 export function saveMethod(method: ClinicMethod): ClinicMethod[] {
   const methods = listMethods();
-  const nextMethod = { ...method, updatedAt: new Date().toISOString() };
-  const index = methods.findIndex((item) => item.id === method.id);
-  const next = index >= 0
-    ? methods.map((item) => item.id === method.id ? nextMethod : item)
-    : [nextMethod, ...methods];
+  const nextMethod = normalizeMethod({ ...method, updatedAt: new Date().toISOString() });
+  const next = upsertMethod(methods, nextMethod);
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   return next;
+}
+
+export function normalizeMethod(method: ClinicMethod): ClinicMethod {
+  return {
+    ...method,
+    phases: method.phases.map((phase) => ({
+      ...phase,
+      materials: phase.materials.filter((item) => item.type === "recipe" || item.type === "material"),
+    })),
+  };
+}
+
+export function upsertMethod(methods: ClinicMethod[], method: ClinicMethod): ClinicMethod[] {
+  const index = methods.findIndex((item) => item.id === method.id);
+  return index >= 0
+    ? methods.map((item) => item.id === method.id ? method : item)
+    : [method, ...methods];
 }
 
 export function removeMethod(methodId: string): ClinicMethod[] {
@@ -79,3 +93,4 @@ export function removeMethod(methodId: string): ClinicMethod[] {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   return next;
 }
+
