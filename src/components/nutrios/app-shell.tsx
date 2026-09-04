@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Building2, Home, LogOut, Moon, Star, Sun } from "lucide-react";
+import { Building2, Home, LogOut, Moon, Star, Sun, WandSparkles } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { ConsultationHome } from "@/components/nutrios/consultation-home";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,9 @@ import { useSession } from "@/lib/nutrios/use-session";
 export function AppShell({ children, title, hideHomeDashboard = false }: { children: ReactNode; title?: string; hideHomeDashboard?: boolean }) {
   const [dark, setDark] = useState(false);
   const navigate = useNavigate();
-  const isHome = useRouterState({ select: (state) => state.location.pathname === "/" });
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const isHome = pathname === "/";
+  const isConsultorioHome = pathname === "/consultorio";
   const { session, loading } = useSession();
 
   useEffect(() => {
@@ -62,7 +64,16 @@ export function AppShell({ children, title, hideHomeDashboard = false }: { child
           <Link to="/" className="text-sm font-semibold tracking-tight">Cach AI</Link>
           <Button variant="ghost" size="icon" onClick={toggle} aria-label={dark ? "Ativar tema claro" : "Ativar tema escuro"}>{dark ? <Sun /> : <Moon />}</Button>
         </div>
-        {title ? <header className="flex min-h-12 items-center border-b border-border px-4 text-sm font-medium md:px-6 print:hidden">{title}</header> : null}
+        {title ? (
+          <header className="flex min-h-12 items-center justify-between gap-3 border-b border-border px-4 text-sm font-medium md:px-6 print:hidden">
+            <span>{title}</span>
+            {isConsultorioHome ? (
+              <a href="/consultorio/metodo/inteligente" className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent">
+                <WandSparkles className="size-3.5" /> Criar método com IA
+              </a>
+            ) : null}
+          </header>
+        ) : null}
         <div className="border-b border-border px-3 py-2 md:hidden print:hidden">
           <nav aria-label="Navegação mobile" className="grid grid-cols-3 gap-1 text-xs">
             <NavItem to="/" icon={<Home className="size-3.5" />} label="Início" />
