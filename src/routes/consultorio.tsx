@@ -81,6 +81,7 @@ function MethodWorkspace() {
       .filter((item) => item.status === "active" && item.title.trim())
       .map((item) => ({ id: item.id, type: "material" as const, label: `${materialCategoryLabel(item.category)} · ${item.title}` })),
   ], [favoriteMaterials, recipes.data]);
+  const isSavedMethod = draft ? methods.some((method) => method.id === draft.id) : false;
 
   const create = () => setDraft(newMethod());
   const save = () => {
@@ -120,7 +121,7 @@ function MethodWorkspace() {
           <section className="rounded-lg border border-border bg-card p-4">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Estrutura do método</p><h2 className="mt-1 text-lg font-semibold">{draft.name || "Novo método"}</h2></div>
-              <div className="flex gap-2"><Button type="button" variant="outline" className="text-destructive" onClick={remove}><Trash2 /> Excluir</Button><Button type="button" onClick={save}><Save /> Salvar método</Button></div>
+              <div className="flex gap-2">{isSavedMethod ? <Button type="button" variant="outline" className="text-destructive" onClick={remove}><Trash2 /> Excluir</Button> : null}<Button type="button" onClick={save}><Save /> Salvar método</Button></div>
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <label className="space-y-1.5 text-xs text-muted-foreground">Nome do método<Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label>
@@ -181,3 +182,4 @@ function ComingSoon({ tab }: { tab: Exclude<OfficeTab, "metodo"> }) { const prod
 function Tab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) { return <Button type="button" variant={active ? "secondary" : "ghost"} className="rounded-b-none" onClick={onClick}>{children}</Button>; }
 function statusLabel(status: ClinicMethod["status"]) { return status === "active" ? "Ativo" : status === "archived" ? "Arquivado" : "Em construção"; }
 function materialTypeLabel(type: MethodMaterial["type"]) { return type === "recipe" ? "receita" : "material"; }
+
