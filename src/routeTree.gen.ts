@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AlimentosRouteImport } from './routes/alimentos'
+import { Route as ConsultorioRouteImport } from './routes/consultorio'
 import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as ReceitasRouteImport } from './routes/receitas'
@@ -29,6 +30,11 @@ const IndexRoute = IndexRouteImport.update({
 const AlimentosRoute = AlimentosRouteImport.update({
   id: '/alimentos',
   path: '/alimentos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConsultorioRoute = ConsultorioRouteImport.update({
+  id: '/consultorio',
+  path: '/consultorio',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EntrarRoute = EntrarRouteImport.update({
@@ -81,6 +87,7 @@ const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/alimentos': typeof AlimentosRoute
+  '/consultorio': typeof ConsultorioRoute
   '/entrar': typeof EntrarRoute
   '/mcp': typeof McpRoute
   '/receitas': typeof ReceitasRoute
@@ -94,6 +101,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/alimentos': typeof AlimentosRoute
+  '/consultorio': typeof ConsultorioRoute
   '/entrar': typeof EntrarRoute
   '/mcp': typeof McpRoute
   '/receitas': typeof ReceitasRoute
@@ -108,6 +116,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/alimentos': typeof AlimentosRoute
+  '/consultorio': typeof ConsultorioRoute
   '/entrar': typeof EntrarRoute
   '/mcp': typeof McpRoute
   '/receitas': typeof ReceitasRoute
@@ -123,6 +132,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/alimentos'
+    | '/consultorio'
     | '/entrar'
     | '/mcp'
     | '/receitas'
@@ -136,6 +146,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/alimentos'
+    | '/consultorio'
     | '/entrar'
     | '/mcp'
     | '/receitas'
@@ -149,6 +160,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/alimentos'
+    | '/consultorio'
     | '/entrar'
     | '/mcp'
     | '/receitas'
@@ -163,6 +175,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AlimentosRoute: typeof AlimentosRoute
+  ConsultorioRoute: typeof ConsultorioRoute
   EntrarRoute: typeof EntrarRoute
   McpRoute: typeof McpRoute
   ReceitasRoute: typeof ReceitasRoute
@@ -188,6 +201,13 @@ declare module '@tanstack/react-router' {
       path: '/alimentos'
       fullPath: '/alimentos'
       preLoaderRoute: typeof AlimentosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/consultorio': {
+      id: '/consultorio'
+      path: '/consultorio'
+      fullPath: '/consultorio'
+      preLoaderRoute: typeof ConsultorioRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/entrar': {
@@ -259,6 +279,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AlimentosRoute: AlimentosRoute,
+  ConsultorioRoute: ConsultorioRoute,
   EntrarRoute: EntrarRoute,
   McpRoute: McpRoute,
   ReceitasRoute: ReceitasRoute,
