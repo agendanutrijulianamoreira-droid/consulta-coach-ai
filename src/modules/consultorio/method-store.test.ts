@@ -45,4 +45,3 @@ describe("clinic method persistence", () => {
     ]);
   });
 });
-
