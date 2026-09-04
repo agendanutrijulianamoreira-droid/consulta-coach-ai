@@ -93,4 +93,3 @@ export function removeMethod(methodId: string): ClinicMethod[] {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
   return next;
 }
-
