@@ -182,4 +182,3 @@ function ComingSoon({ tab }: { tab: Exclude<OfficeTab, "metodo"> }) { const prod
 function Tab({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) { return <Button type="button" variant={active ? "secondary" : "ghost"} className="rounded-b-none" onClick={onClick}>{children}</Button>; }
 function statusLabel(status: ClinicMethod["status"]) { return status === "active" ? "Ativo" : status === "archived" ? "Arquivado" : "Em construção"; }
 function materialTypeLabel(type: MethodMaterial["type"]) { return type === "recipe" ? "receita" : "material"; }
-
