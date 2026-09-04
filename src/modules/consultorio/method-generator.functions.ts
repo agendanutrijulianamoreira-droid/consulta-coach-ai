@@ -112,7 +112,8 @@ export const generateClinicMethod = createServerFn({ method: "POST" })
       effort: "medium",
     });
 
-    const phases = (parsed.phases ?? []).slice(0, data.phaseCount).map((phase, index) => ({
+    const safeParsed: GeneratedMethodDraft = parsed ?? { name: "", description: "", phases: [] };
+    const phases = safeParsed.phases.slice(0, data.phaseCount).map((phase, index) => ({
       title: phase.title?.trim() || `Fase ${index + 1}`,
       objective: phase.objective?.trim() || "",
       goals: (phase.goals ?? []).map((goal) => goal.trim()).filter(Boolean).slice(0, 6),
@@ -121,8 +122,8 @@ export const generateClinicMethod = createServerFn({ method: "POST" })
 
     return {
       draft: {
-        name: parsed.name?.trim() || data.name.trim() || "Novo método",
-        description: parsed.description?.trim() || "",
+        name: safeParsed.name?.trim() || data.name.trim() || "Novo método",
+        description: safeParsed.description?.trim() || "",
         phases,
       } satisfies GeneratedMethodDraft,
     };
