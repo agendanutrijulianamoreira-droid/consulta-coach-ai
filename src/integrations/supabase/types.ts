@@ -335,6 +335,181 @@ export type Database = {
         }
         Relationships: []
       }
+      lab_assessments: {
+        Row: {
+          collection_date: string | null
+          consultation_id: string
+          created_at: string
+          id: string
+          laboratory_name: string | null
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          collection_date?: string | null
+          consultation_id: string
+          created_at?: string
+          id?: string
+          laboratory_name?: string | null
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          collection_date?: string | null
+          consultation_id?: string
+          created_at?: string
+          id?: string
+          laboratory_name?: string | null
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lab_assessments_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: true
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lab_reference_targets: {
+        Row: {
+          active: boolean
+          age_max: number | null
+          age_min: number | null
+          analyte_code: string
+          analyte_name: string
+          created_at: string
+          id: string
+          interpretation_above: string | null
+          interpretation_below: string | null
+          interpretation_in_range: string | null
+          professional_id: string | null
+          sex: string | null
+          source_label: string | null
+          source_version: string | null
+          target_max: number | null
+          target_min: number | null
+          unit: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          age_max?: number | null
+          age_min?: number | null
+          analyte_code: string
+          analyte_name: string
+          created_at?: string
+          id?: string
+          interpretation_above?: string | null
+          interpretation_below?: string | null
+          interpretation_in_range?: string | null
+          professional_id?: string | null
+          sex?: string | null
+          source_label?: string | null
+          source_version?: string | null
+          target_max?: number | null
+          target_min?: number | null
+          unit?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          age_max?: number | null
+          age_min?: number | null
+          analyte_code?: string
+          analyte_name?: string
+          created_at?: string
+          id?: string
+          interpretation_above?: string | null
+          interpretation_below?: string | null
+          interpretation_in_range?: string | null
+          professional_id?: string | null
+          sex?: string | null
+          source_label?: string | null
+          source_version?: string | null
+          target_max?: number | null
+          target_min?: number | null
+          unit?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      lab_results: {
+        Row: {
+          analyte_code: string
+          analyte_name: string
+          calculation_key: string | null
+          calculation_version: string | null
+          consultation_id: string
+          created_at: string
+          dependencies: Json
+          id: string
+          input_method: string
+          is_derived: boolean
+          lab_reference_max: number | null
+          lab_reference_min: number | null
+          lab_reference_text: string | null
+          review_status: string
+          source_note: string | null
+          unit: string | null
+          updated_at: string
+          value: number | null
+          value_text: string | null
+        }
+        Insert: {
+          analyte_code: string
+          analyte_name: string
+          calculation_key?: string | null
+          calculation_version?: string | null
+          consultation_id: string
+          created_at?: string
+          dependencies?: Json
+          id?: string
+          input_method?: string
+          is_derived?: boolean
+          lab_reference_max?: number | null
+          lab_reference_min?: number | null
+          lab_reference_text?: string | null
+          review_status?: string
+          source_note?: string | null
+          unit?: string | null
+          updated_at?: string
+          value?: number | null
+          value_text?: string | null
+        }
+        Update: {
+          analyte_code?: string
+          analyte_name?: string
+          calculation_key?: string | null
+          calculation_version?: string | null
+          consultation_id?: string
+          created_at?: string
+          dependencies?: Json
+          id?: string
+          input_method?: string
+          is_derived?: boolean
+          lab_reference_max?: number | null
+          lab_reference_min?: number | null
+          lab_reference_text?: string | null
+          review_status?: string
+          source_note?: string | null
+          unit?: string | null
+          updated_at?: string
+          value?: number | null
+          value_text?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lab_results_consultation_id_fkey"
+            columns: ["consultation_id"]
+            isOneToOne: false
+            referencedRelation: "consultations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meal_plans: {
         Row: {
           consultation_id: string
