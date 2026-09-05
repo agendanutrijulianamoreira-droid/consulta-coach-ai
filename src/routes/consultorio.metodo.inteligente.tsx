@@ -13,7 +13,7 @@ import { generateClinicMethod, type GeneratedMethodDraft } from "@/modules/consu
 import { newMethod, newPhase, saveMethod, type MethodMaterial } from "@/modules/consultorio/method-store";
 import { listFavoriteMaterials, materialCategoryLabel, type FavoriteMaterial } from "@/modules/favoritos/material-store";
 
-// @ts-expect-error a rota será incluída no routeTree pelo gerador do TanStack Router durante o build.
+
 export const Route = createFileRoute("/consultorio/metodo/inteligente")({
   head: () => ({ meta: [{ title: "Criar método com IA — Cach AI" }] }),
   component: IntelligentMethodBuilder,
