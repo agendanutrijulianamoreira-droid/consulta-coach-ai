@@ -21,6 +21,7 @@ import { Route as PacienteIdRouteImport } from './routes/paciente.$id'
 import { Route as ParecerIdRouteImport } from './routes/parecer.$id'
 import { Route as ProntuarioIdRouteImport } from './routes/prontuario.$id'
 import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
+import { Route as ConsultorioMetodoInteligenteRouteImport } from './routes/consultorio.metodo.inteligente'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -83,11 +84,17 @@ const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
   path: '/.lovable/oauth/consent',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ConsultorioMetodoInteligenteRoute =
+  ConsultorioMetodoInteligenteRouteImport.update({
+    id: '/metodo/inteligente',
+    path: '/metodo/inteligente',
+    getParentRoute: () => ConsultorioRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/alimentos': typeof AlimentosRoute
-  '/consultorio': typeof ConsultorioRoute
+  '/consultorio': typeof ConsultorioRouteWithChildren
   '/entrar': typeof EntrarRoute
   '/mcp': typeof McpRoute
   '/receitas': typeof ReceitasRoute
@@ -97,11 +104,12 @@ export interface FileRoutesByFullPath {
   '/parecer/$id': typeof ParecerIdRoute
   '/prontuario/$id': typeof ProntuarioIdRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
+  '/consultorio/metodo/inteligente': typeof ConsultorioMetodoInteligenteRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/alimentos': typeof AlimentosRoute
-  '/consultorio': typeof ConsultorioRoute
+  '/consultorio': typeof ConsultorioRouteWithChildren
   '/entrar': typeof EntrarRoute
   '/mcp': typeof McpRoute
   '/receitas': typeof ReceitasRoute
@@ -111,12 +119,13 @@ export interface FileRoutesByTo {
   '/parecer/$id': typeof ParecerIdRoute
   '/prontuario/$id': typeof ProntuarioIdRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
+  '/consultorio/metodo/inteligente': typeof ConsultorioMetodoInteligenteRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/alimentos': typeof AlimentosRoute
-  '/consultorio': typeof ConsultorioRoute
+  '/consultorio': typeof ConsultorioRouteWithChildren
   '/entrar': typeof EntrarRoute
   '/mcp': typeof McpRoute
   '/receitas': typeof ReceitasRoute
@@ -126,6 +135,7 @@ export interface FileRoutesById {
   '/parecer/$id': typeof ParecerIdRoute
   '/prontuario/$id': typeof ProntuarioIdRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
+  '/consultorio/metodo/inteligente': typeof ConsultorioMetodoInteligenteRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -142,6 +152,7 @@ export interface FileRouteTypes {
     | '/parecer/$id'
     | '/prontuario/$id'
     | '/.lovable/oauth/consent'
+    | '/consultorio/metodo/inteligente'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -156,6 +167,7 @@ export interface FileRouteTypes {
     | '/parecer/$id'
     | '/prontuario/$id'
     | '/.lovable/oauth/consent'
+    | '/consultorio/metodo/inteligente'
   id:
     | '__root__'
     | '/'
@@ -170,12 +182,13 @@ export interface FileRouteTypes {
     | '/parecer/$id'
     | '/prontuario/$id'
     | '/.lovable/oauth/consent'
+    | '/consultorio/metodo/inteligente'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AlimentosRoute: typeof AlimentosRoute
-  ConsultorioRoute: typeof ConsultorioRoute
+  ConsultorioRoute: typeof ConsultorioRouteWithChildren
   EntrarRoute: typeof EntrarRoute
   McpRoute: typeof McpRoute
   ReceitasRoute: typeof ReceitasRoute
@@ -273,13 +286,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DotlovableOauthConsentRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/consultorio/metodo/inteligente': {
+      id: '/consultorio/metodo/inteligente'
+      path: '/metodo/inteligente'
+      fullPath: '/consultorio/metodo/inteligente'
+      preLoaderRoute: typeof ConsultorioMetodoInteligenteRouteImport
+      parentRoute: typeof ConsultorioRoute
+    }
   }
 }
+
+interface ConsultorioRouteChildren {
+  ConsultorioMetodoInteligenteRoute: typeof ConsultorioMetodoInteligenteRoute
+}
+
+const ConsultorioRouteChildren: ConsultorioRouteChildren = {
+  ConsultorioMetodoInteligenteRoute: ConsultorioMetodoInteligenteRoute,
+}
+
+const ConsultorioRouteWithChildren = ConsultorioRoute._addFileChildren(
+  ConsultorioRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AlimentosRoute: AlimentosRoute,
-  ConsultorioRoute: ConsultorioRoute,
+  ConsultorioRoute: ConsultorioRouteWithChildren,
   EntrarRoute: EntrarRoute,
   McpRoute: McpRoute,
   ReceitasRoute: ReceitasRoute,
