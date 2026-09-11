@@ -118,6 +118,9 @@ function Home() {
             onConfirm={(consultationDate) => {
               if (consultationPatient) startConsultation.mutate({ patientId: consultationPatient.id, consultationDate });
             }}
+            onDecline={() => {
+              if (consultationPatient) setWorkspace({ patientId: consultationPatient.id, section: "perfil" });
+            }}
           />
           <PatientDialog open={dialogOpen} onOpenChange={setDialogOpen} patient={editing} onOpenWorkspace={(patientId, consultationId) => setWorkspace({ patientId, consultationId, section: consultationId ? "consulta" : "perfil" })} />
           <PatientWorkspaceDialog open={!!workspace} patientId={workspace?.patientId ?? null} initialConsultationId={workspace?.consultationId} initialSection={workspace?.section} onOpenChange={(open) => { if (!open) setWorkspace(null); }} />
