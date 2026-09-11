@@ -47,7 +47,7 @@ export function FavoriteMaterialsLibrary() {
       .then((available) => { if (active) setFileAvailable(available); })
       .catch(() => { if (active) setFileAvailable(false); });
     return () => { active = false; };
-  }, [draft?.id]);
+  }, [draft?.id, draft?.fileName, draft?.fileStorage]);
 
   const visible = useMemo(() => {
     const term = search.trim().toLowerCase();
