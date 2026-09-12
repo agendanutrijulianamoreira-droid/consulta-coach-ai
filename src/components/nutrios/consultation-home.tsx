@@ -115,6 +115,10 @@ export function ConsultationHome() {
     () => buildMonthlyHistory(consultationDates.data ?? []),
     [consultationDates.data],
   );
+  const historyTotal = useMemo(
+    () => monthlyHistory.reduce((sum, item) => sum + item.count, 0),
+    [monthlyHistory],
+  );
   const firstName = getFirstName(
     session?.user.user_metadata["full_name"] ?? session?.user.user_metadata["name"],
   );
@@ -208,8 +212,8 @@ export function ConsultationHome() {
           birthdayCount={birthdayCount}
           patientRows={patientRows}
           birthdayRows={birthdayRows}
-          isLoading={patients.isLoading || consultations.isLoading}
-          isError={patients.isError || consultations.isError}
+          isLoading={patients.isLoading}
+          isError={patients.isError}
           onOpen={openPatient}
           onNewConsultation={selectConsultationPatient}
           isStartingConsultation={startConsultation.isPending}
@@ -219,7 +223,7 @@ export function ConsultationHome() {
         <ConsultationHistory
           isLoading={consultationDates.isLoading}
           isError={consultationDates.isError}
-          total={consultationStats.total}
+          total={historyTotal}
           history={monthlyHistory}
         />
       </div>
@@ -290,7 +294,7 @@ function comparePatientRows(a: PatientRow, b: PatientRow) {
 function normalize(value: string) {
   return value
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .trim();
 }
@@ -328,8 +332,6 @@ function summarizeConsultations(rows: { consultation_date: string }[]) {
   const monthKey = todayKey.slice(0, 7);
   const sevenDaysAgo = new Date(today);
   sevenDaysAgo.setDate(today.getDate() - 6);
-  const firstHistoryMonth = new Date(today.getFullYear(), today.getMonth() - 12, 1);
-  const historyStart = toLocalDateKey(firstHistoryMonth);
 
   return {
     month: rows.filter((row) => row.consultation_date.slice(0, 7) === monthKey).length,
@@ -337,7 +339,6 @@ function summarizeConsultations(rows: { consultation_date: string }[]) {
       const date = row.consultation_date.slice(0, 10);
       return date >= toLocalDateKey(sevenDaysAgo) && date <= todayKey;
     }).length,
-    total: rows.filter((row) => row.consultation_date.slice(0, 10) >= historyStart).length,
   };
 }
 
