@@ -121,6 +121,7 @@ export function ConsultationHome() {
   );
   const firstName = getFirstName(
     session?.user.user_metadata["full_name"] ?? session?.user.user_metadata["name"],
+    session?.user.email,
   );
 
   const startConsultation = useMutation({
@@ -299,9 +300,12 @@ function normalize(value: string) {
     .trim();
 }
 
-function getFirstName(value: unknown) {
-  if (typeof value !== "string" || !value.trim()) return "Juliana";
-  return value.trim().split(/\s+/)[0] ?? "Juliana";
+function getFirstName(value: unknown, email?: string | null) {
+  if (typeof value === "string" && value.trim()) {
+    return value.trim().split(/\s+/)[0] ?? "";
+  }
+  const local = email?.split("@")[0]?.trim();
+  return local || "";
 }
 
 function getBirthDateParts(value: string | null) {
