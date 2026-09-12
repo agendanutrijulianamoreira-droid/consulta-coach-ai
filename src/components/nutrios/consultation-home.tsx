@@ -1,12 +1,21 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, UserRound } from "lucide-react";
 import { toast } from "sonner";
+import {
+  ConsultationHistory,
+  HomeHeader,
+  PatientQuickAccess,
+  SummaryCards,
+  type PatientRow,
+  type PatientView,
+} from "@/components/nutrios/consultation-home-sections";
 import { ConsultationRegistrationDialog } from "@/components/nutrios/consultation-registration-dialog";
 import { PatientDialog } from "@/components/nutrios/patient-dialog";
-import { PatientWorkspaceDialog, type WorkspaceSection } from "@/components/nutrios/patient-workspace-dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  PatientWorkspaceDialog,
+  type WorkspaceSection,
+} from "@/components/nutrios/patient-workspace-dialog";
+import { useSession } from "@/lib/nutrios/use-session";
 import * as db from "@/lib/nutrios/repository";
 
 type WorkspaceState = {
@@ -15,169 +24,333 @@ type WorkspaceState = {
   section?: WorkspaceSection | undefined;
 } | null;
 
-type RecentPatient = {
-  patient: db.Patient;
-  consultationId: string | null;
-  lastAttendance: string | null;
-};
+function focusConsultationSearch(
+  searchArea: HTMLDivElement | null,
+  searchInput: HTMLInputElement | null,
+) {
+  const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ? "auto"
+    : "smooth";
+  searchArea?.scrollIntoView({ behavior, block: "center" });
+  searchInput?.focus({ preventScroll: true });
+}
 
 export function ConsultationHome() {
   const queryClient = useQueryClient();
+  const searchAreaRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const { session } = useSession();
   const [search, setSearch] = useState("");
+  const [patientView, setPatientView] = useState<PatientView>("recent");
+  const [consultationPrompt, setConsultationPrompt] = useState(false);
   const [patientDialogOpen, setPatientDialogOpen] = useState(false);
   const [workspace, setWorkspace] = useState<WorkspaceState>(null);
   const [consultationPatient, setConsultationPatient] = useState<db.Patient | null>(null);
 
   const patients = useQuery({ queryKey: ["patients"], queryFn: db.listPatients });
   const consultations = useQuery({ queryKey: ["consultations"], queryFn: db.listConsultations });
-  const consultationDates = useQuery({ queryKey: ["consultation-dates"], queryFn: db.listConsultationDates });
+  const consultationDates = useQuery({
+    queryKey: ["consultation-dates"],
+    queryFn: db.listConsultationDates,
+  });
 
-  const patientRows = useMemo(() => {
-    const latestByPatient = new Map<string, { id: string; date: string }>();
+  const latestByPatient = useMemo(() => {
+    const latest = new Map<string, { id: string; date: string }>();
     for (const consultation of consultations.data ?? []) {
       const date = consultation.consultation_date ?? consultation.created_at;
-      const current = latestByPatient.get(consultation.patient_id);
-      if (!current || date > current.date) latestByPatient.set(consultation.patient_id, { id: consultation.id, date });
+      const current = latest.get(consultation.patient_id);
+      if (!current || date > current.date) {
+        latest.set(consultation.patient_id, { id: consultation.id, date });
+      }
     }
+    return latest;
+  }, [consultations.data]);
 
+  const filteredPatients = useMemo(() => {
     const term = normalize(search);
-    const rows: RecentPatient[] = (patients.data ?? [])
-      .filter((patient) => {
-        if (!term) return true;
-        return [patient.name, patient.cpf ?? "", patient.phone ?? "", patient.email ?? "", ...(patient.tags ?? [])]
-          .some((value) => normalize(value).includes(term));
-      })
-      .map((patient) => {
-        const latest = latestByPatient.get(patient.id);
-        return {
-          patient,
-          consultationId: latest?.id ?? null,
-          lastAttendance: latest?.date ?? null,
-        };
-      });
-
-    return rows
-      .sort((a, b) => {
-        if (a.lastAttendance && b.lastAttendance) return b.lastAttendance.localeCompare(a.lastAttendance);
-        if (a.lastAttendance) return -1;
-        if (b.lastAttendance) return 1;
-        return b.patient.created_at.localeCompare(a.patient.created_at);
-      })
-      .slice(0, 5);
-  }, [patients.data, consultations.data, search]);
-
-  const birthdaysToday = useMemo(() => {
-    const today = new Date();
-    const month = today.getMonth() + 1;
-    const day = today.getDate();
     return (patients.data ?? []).filter((patient) => {
-      if (!patient.birth_date) return false;
-      const [, mm, dd] = patient.birth_date.split("-").map(Number);
-      return mm === month && dd === day;
+      if (!term) return true;
+      return [
+        patient.name,
+        patient.cpf ?? "",
+        patient.phone ?? "",
+        patient.email ?? "",
+        ...(patient.tags ?? []),
+      ].some((value) => normalize(value).includes(term));
     });
+  }, [patients.data, search]);
+
+  const patientRows = useMemo<PatientRow[]>(() => {
+    return filteredPatients
+      .map((patient) => toPatientRow(patient, latestByPatient))
+      .sort(comparePatientRows)
+      .slice(0, 5);
+  }, [filteredPatients, latestByPatient]);
+
+  const birthdayRows = useMemo<PatientRow[]>(() => {
+    const currentMonth = new Date().getMonth() + 1;
+    return filteredPatients
+      .filter((patient) => getBirthDateParts(patient.birth_date)?.month === currentMonth)
+      .sort((a, b) => {
+        const aDay = getBirthDateParts(a.birth_date)?.day ?? 0;
+        const bDay = getBirthDateParts(b.birth_date)?.day ?? 0;
+        return aDay - bDay || a.name.localeCompare(b.name, "pt-BR");
+      })
+      .map((patient) => toPatientRow(patient, latestByPatient))
+      .slice(0, 5);
+  }, [filteredPatients, latestByPatient]);
+
+  const birthdayCount = useMemo(() => {
+    const currentMonth = new Date().getMonth() + 1;
+    return (patients.data ?? []).filter(
+      (patient) => getBirthDateParts(patient.birth_date)?.month === currentMonth,
+    ).length;
   }, [patients.data]);
 
-  const monthlyHistory = useMemo(() => buildMonthlyHistory(consultationDates.data ?? []), [consultationDates.data]);
-  const maxMonth = Math.max(1, ...monthlyHistory.map((item) => item.count));
+  const consultationStats = useMemo(
+    () => summarizeConsultations(consultationDates.data ?? []),
+    [consultationDates.data],
+  );
+  const monthlyHistory = useMemo(
+    () => buildMonthlyHistory(consultationDates.data ?? []),
+    [consultationDates.data],
+  );
+  const historyTotal = useMemo(
+    () => monthlyHistory.reduce((sum, item) => sum + item.count, 0),
+    [monthlyHistory],
+  );
+  const firstName = getFirstName(
+    session?.user.user_metadata["full_name"] ?? session?.user.user_metadata["name"],
+    session?.user.email,
+  );
 
   const startConsultation = useMutation({
-    mutationFn: ({ patientId, consultationDate }: { patientId: string; consultationDate: string }) => db.createConsultation(patientId, consultationDate),
+    mutationFn: ({
+      patientId,
+      consultationDate,
+    }: {
+      patientId: string;
+      consultationDate: string;
+    }) => db.createConsultation(patientId, consultationDate),
     onSuccess: async (consultation) => {
       setConsultationPatient(null);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["consultations"] }),
         queryClient.invalidateQueries({ queryKey: ["consultation-dates"] }),
       ]);
-      setWorkspace({ patientId: consultation.patient_id, consultationId: consultation.id, section: "consulta" });
+      setWorkspace({
+        patientId: consultation.patient_id,
+        consultationId: consultation.id,
+        section: "consulta",
+      });
     },
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const guideToNewConsultation = () => {
+    setPatientView("recent");
+    setConsultationPrompt(true);
+    window.requestAnimationFrame(() => {
+      focusConsultationSearch(searchAreaRef.current, searchInputRef.current);
+    });
+  };
+
+  const selectConsultationPatient = (patient: db.Patient) => {
+    setConsultationPrompt(false);
+    setConsultationPatient(patient);
+  };
+
+  const openPatient = (row: PatientRow) => {
+    setWorkspace({
+      patientId: row.patient.id,
+      consultationId: row.consultationId ?? undefined,
+      section: "perfil",
+    });
+  };
+
   return (
-    <section className="border-b border-border bg-muted/20 print:hidden">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
-        <div className="rounded-lg border border-border bg-background p-4 sm:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h1 className="text-xl font-semibold tracking-tight">Pacientes recentes</h1>
-              <p className="mt-1 text-xs text-muted-foreground">Acesso rápido pelos últimos atendimentos</p>
-            </div>
-            <div className="flex flex-wrap gap-1 text-xs">
-              <Button variant="ghost" size="sm" onClick={() => window.location.assign("/?patients=all")}>Ver todos</Button>
-              <Button variant="ghost" size="sm" disabled={!birthdaysToday.length} title={birthdaysToday.map((patient) => patient.name).join(", ")}>Aniversariantes ({birthdaysToday.length})</Button>
-            </div>
-          </div>
+    <section className="min-h-[calc(100vh-3rem)] border-b border-border bg-muted/25 print:hidden">
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:py-10">
+        <HomeHeader
+          dateLabel={formatToday()}
+          firstName={firstName}
+          onAddPatient={() => setPatientDialogOpen(true)}
+          onNewConsultation={guideToNewConsultation}
+        />
 
-          <Button className="mt-5 w-full" onClick={() => setPatientDialogOpen(true)}><Plus /> Adicionar paciente</Button>
+        <SummaryCards
+          patients={
+            patients.isLoading ? null : patients.isError ? undefined : (patients.data?.length ?? 0)
+          }
+          currentMonth={
+            consultationDates.isLoading
+              ? null
+              : consultationDates.isError
+                ? undefined
+                : consultationStats.month
+          }
+          lastSevenDays={
+            consultationDates.isLoading
+              ? null
+              : consultationDates.isError
+                ? undefined
+                : consultationStats.lastSevenDays
+          }
+          birthdays={patients.isLoading ? null : patients.isError ? undefined : birthdayCount}
+        />
 
-          <div className="relative mt-3">
-            <Search className="pointer-events-none absolute left-3 top-3 size-4 text-muted-foreground" />
-            <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Busque por nome, CPF, telefone, e-mail ou tag" className="pl-9" />
-          </div>
+        <PatientQuickAccess
+          search={search}
+          onSearchChange={(value) => {
+            setSearch(value);
+            setConsultationPrompt(false);
+          }}
+          searchAreaRef={searchAreaRef}
+          searchInputRef={searchInputRef}
+          consultationPrompt={consultationPrompt}
+          patientView={patientView}
+          onPatientViewChange={setPatientView}
+          birthdayCount={birthdayCount}
+          patientRows={patientRows}
+          birthdayRows={birthdayRows}
+          isLoading={patients.isLoading}
+          isError={patients.isError}
+          onOpen={openPatient}
+          onNewConsultation={selectConsultationPatient}
+          isStartingConsultation={startConsultation.isPending}
+          onViewAll={() => window.location.assign("/?patients=all")}
+        />
 
-          <div className="mt-3 divide-y divide-border rounded-md bg-muted/35 px-3">
-            {patientRows.map(({ patient, consultationId, lastAttendance }) => (
-              <div key={patient.id} className="flex items-center gap-3 py-3">
-                <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => setWorkspace({ patientId: patient.id, consultationId: consultationId ?? undefined, section: "perfil" })}>
-                  <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted"><UserRound className="size-5 text-muted-foreground" /></span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">{patient.name}</span>
-                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">{lastAttendance ? `Último atendimento: ${formatDate(lastAttendance)}` : "Sem atendimento registrado"}</span>
-                  </span>
-                </button>
-                <Button size="sm" variant="secondary" disabled={startConsultation.isPending} onClick={() => setConsultationPatient(patient)}>Nova consulta</Button>
-              </div>
-            ))}
-            {!patientRows.length ? <p className="py-8 text-center text-sm text-muted-foreground">Nenhum paciente encontrado.</p> : null}
-          </div>
-        </div>
-
-        <div className="mt-5 rounded-lg border border-border bg-background p-4 sm:p-5">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h2 className="text-xl font-semibold tracking-tight">Histórico de consultas</h2>
-              <p className="mt-1 text-xs text-muted-foreground">Últimos 13 meses</p>
-            </div>
-          </div>
-          <div className="mt-5 flex h-64 items-end gap-2 overflow-x-auto border-b border-border pb-6">
-            {monthlyHistory.map((item) => (
-              <div key={item.key} className="flex min-w-14 flex-1 flex-col items-center justify-end gap-2">
-                <span className="text-[10px] tabular-nums text-muted-foreground">{item.count}</span>
-                <div className="w-full max-w-12 rounded-t-sm bg-primary/80" style={{ height: `${Math.max(4, (item.count / maxMonth) * 180)}px` }} />
-                <span className="text-[10px] text-muted-foreground">{item.label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <ConsultationHistory
+          isLoading={consultationDates.isLoading}
+          isError={consultationDates.isError}
+          total={historyTotal}
+          history={monthlyHistory}
+        />
       </div>
 
       <ConsultationRegistrationDialog
         open={!!consultationPatient}
         patientName={consultationPatient?.name}
         isPending={startConsultation.isPending}
-        onOpenChange={(open) => { if (!open) setConsultationPatient(null); }}
+        onOpenChange={(open) => {
+          if (!open) setConsultationPatient(null);
+        }}
         onConfirm={(consultationDate) => {
-          if (consultationPatient) startConsultation.mutate({ patientId: consultationPatient.id, consultationDate });
+          if (consultationPatient) {
+            startConsultation.mutate({ patientId: consultationPatient.id, consultationDate });
+          }
+        }}
+        onDecline={() => {
+          if (consultationPatient) {
+            setWorkspace({ patientId: consultationPatient.id, section: "perfil" });
+          }
         }}
       />
-      <PatientDialog open={patientDialogOpen} onOpenChange={setPatientDialogOpen} onOpenWorkspace={(patientId, consultationId) => setWorkspace({ patientId, consultationId, section: consultationId ? "consulta" : "perfil" })} />
-      <PatientWorkspaceDialog open={!!workspace} patientId={workspace?.patientId ?? null} initialConsultationId={workspace?.consultationId} initialSection={workspace?.section} onOpenChange={(open) => { if (!open) setWorkspace(null); }} />
+      <PatientDialog
+        open={patientDialogOpen}
+        onOpenChange={setPatientDialogOpen}
+        onOpenWorkspace={(patientId, consultationId) =>
+          setWorkspace({
+            patientId,
+            consultationId,
+            section: consultationId ? "consulta" : "perfil",
+          })
+        }
+      />
+      <PatientWorkspaceDialog
+        open={!!workspace}
+        patientId={workspace?.patientId ?? null}
+        initialConsultationId={workspace?.consultationId}
+        initialSection={workspace?.section}
+        onOpenChange={(open) => {
+          if (!open) setWorkspace(null);
+        }}
+      />
     </section>
   );
 }
 
-function normalize(value: string) {
-  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+function toPatientRow(
+  patient: db.Patient,
+  latestByPatient: Map<string, { id: string; date: string }>,
+): PatientRow {
+  const latest = latestByPatient.get(patient.id);
+  return {
+    patient,
+    consultationId: latest?.id ?? null,
+    lastAttendance: latest?.date ?? null,
+  };
 }
 
-function formatDate(value: string) {
-  const date = value.length === 10 ? new Date(`${value}T12:00:00`) : new Date(value);
-  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
+function comparePatientRows(a: PatientRow, b: PatientRow) {
+  if (a.lastAttendance && b.lastAttendance) {
+    return b.lastAttendance.localeCompare(a.lastAttendance);
+  }
+  if (a.lastAttendance) return -1;
+  if (b.lastAttendance) return 1;
+  return b.patient.created_at.localeCompare(a.patient.created_at);
+}
+
+function normalize(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function getFirstName(value: unknown, email?: string | null) {
+  if (typeof value === "string" && value.trim()) {
+    return value.trim().split(/\s+/)[0] ?? "";
+  }
+  const local = email?.split("@")[0]?.trim();
+  return local || "";
+}
+
+function getBirthDateParts(value: string | null) {
+  if (!value) return null;
+  const [, month, day] = value.slice(0, 10).split("-").map(Number);
+  if (!month || !day) return null;
+  return { month, day };
+}
+
+function formatToday() {
+  return new Intl.DateTimeFormat("pt-BR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  }).format(new Date());
+}
+
+function toLocalDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function summarizeConsultations(rows: { consultation_date: string }[]) {
+  const today = new Date();
+  const todayKey = toLocalDateKey(today);
+  const monthKey = todayKey.slice(0, 7);
+  const sevenDaysAgo = new Date(today);
+  sevenDaysAgo.setDate(today.getDate() - 6);
+
+  return {
+    month: rows.filter((row) => row.consultation_date.slice(0, 7) === monthKey).length,
+    lastSevenDays: rows.filter((row) => {
+      const date = row.consultation_date.slice(0, 10);
+      return date >= toLocalDateKey(sevenDaysAgo) && date <= todayKey;
+    }).length,
+  };
 }
 
 function buildMonthlyHistory(rows: { consultation_date: string }[]) {
-  const formatter = new Intl.DateTimeFormat("pt-BR", { month: "short", year: "2-digit" });
+  const shortFormatter = new Intl.DateTimeFormat("pt-BR", { month: "short" });
+  const longFormatter = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" });
   const now = new Date();
+
   return Array.from({ length: 13 }, (_, index) => {
     const offset = 12 - index;
     const date = new Date(now.getFullYear(), now.getMonth() - offset, 1);
@@ -187,6 +360,12 @@ function buildMonthlyHistory(rows: { consultation_date: string }[]) {
       const item = new Date(`${row.consultation_date.slice(0, 10)}T12:00:00`);
       return item.getFullYear() === year && item.getMonth() === month;
     }).length;
-    return { key: `${year}-${month + 1}`, label: formatter.format(date).replace(" de ", "/"), count };
+
+    return {
+      key: `${year}-${month + 1}`,
+      label: shortFormatter.format(date).replace(".", ""),
+      fullLabel: longFormatter.format(date),
+      count,
+    };
   });
 }
