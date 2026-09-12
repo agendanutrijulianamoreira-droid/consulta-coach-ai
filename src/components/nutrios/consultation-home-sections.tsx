@@ -52,7 +52,9 @@ export function HomeHeader({
         <p className="text-sm font-medium text-muted-foreground" lang="pt-BR">
           {dateLabel}
         </p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Olá, {firstName}</h1>
+        <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
+          {firstName ? `Olá, ${firstName}` : "Olá"}
+        </h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Veja o que precisa da sua atenção hoje.
         </p>
