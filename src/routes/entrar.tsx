@@ -11,7 +11,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/lib/nutrios/use-session";
 
 export const Route = createFileRoute("/entrar")({
-  head: () => ({ meta: [{ title: "Entrar — NutriOS" }] }),
+  head: () => ({
+    meta: [
+      { title: "Entrar — Cach AI" },
+      { name: "description", content: "Acesso restrito ao consultório Cach AI." },
+      { property: "og:title", content: "Entrar — Cach AI" },
+      { property: "og:description", content: "Acesso restrito ao consultório Cach AI." },
+    ],
+  }),
   component: LoginPage,
 });
 
@@ -57,9 +64,17 @@ function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-sm">
+      <Card className="cach-panel w-full max-w-sm shadow-float">
         <CardHeader>
-          <CardTitle className="text-xl">NutriOS</CardTitle>
+          <div className="mb-1 flex items-center gap-3">
+            <span className="grid size-11 place-items-center rounded-xl bg-linear-145 from-sand-soft to-sand font-display text-xl font-bold text-primary">
+              C
+            </span>
+            <div className="flex flex-col leading-tight">
+              <CardTitle className="font-display text-xl">Cach AI</CardTitle>
+              <span className="text-[11px] text-muted-foreground">Consultas inteligentes</span>
+            </div>
+          </div>
           <CardDescription>
             Acesso restrito ao consultório. Seus dados clínicos ficam vinculados à sua conta.
           </CardDescription>

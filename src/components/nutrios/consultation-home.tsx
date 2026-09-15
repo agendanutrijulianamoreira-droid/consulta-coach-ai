@@ -169,8 +169,8 @@ export function ConsultationHome() {
   };
 
   return (
-    <section className="min-h-[calc(100vh-3rem)] border-b border-border bg-muted/25 print:hidden">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8 lg:py-10">
+    <section className="min-h-[calc(100vh-3rem)] bg-background print:hidden">
+      <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 sm:py-7 lg:px-9">
         <HomeHeader
           dateLabel={formatToday()}
           firstName={firstName}
@@ -293,11 +293,7 @@ function comparePatientRows(a: PatientRow, b: PatientRow) {
 }
 
 function normalize(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .trim();
+  return value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 }
 
 function getFirstName(value: unknown, email?: string | null) {

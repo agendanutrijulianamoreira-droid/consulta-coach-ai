@@ -47,15 +47,18 @@ export function HomeHeader({
   onNewConsultation: () => void;
 }) {
   return (
-    <header className="flex flex-col gap-5 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
+    <header className="flex flex-col gap-5 pb-6 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
-        <p className="text-sm font-medium text-muted-foreground" lang="pt-BR">
+        <p
+          className="text-[11px] font-semibold uppercase tracking-[0.11em] text-muted-foreground"
+          lang="pt-BR"
+        >
           {dateLabel}
         </p>
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
+        <h1 className="mt-1.5 font-display text-2xl font-semibold tracking-tight sm:text-[26px]">
           {firstName ? `Olá, ${firstName}` : "Olá"}
         </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
+        <p className="mt-2 text-xs text-muted-foreground">
           Veja o que precisa da sua atenção hoje.
         </p>
       </div>
@@ -96,20 +99,29 @@ export function SummaryCards({
         label="Pacientes"
         value={patients}
         detail="Total cadastrado"
+        featured
       />
       <MetricCard
         icon={<CalendarRange />}
         label="Neste mês"
         value={currentMonth}
         detail="Consultas registradas"
+        tone="sage"
       />
       <MetricCard
         icon={<Clock3 />}
         label="Últimos 7 dias"
         value={lastSevenDays}
         detail="Atendimentos recentes"
+        tone="sand"
       />
-      <MetricCard icon={<Cake />} label="Aniversariantes" value={birthdays} detail="Neste mês" />
+      <MetricCard
+        icon={<Cake />}
+        label="Aniversariantes"
+        value={birthdays}
+        detail="Neste mês"
+        tone="blush"
+      />
     </section>
   );
 }
@@ -119,17 +131,40 @@ function MetricCard({
   label,
   value,
   detail,
+  tone = "sage",
+  featured = false,
 }: {
   icon: ReactNode;
   label: string;
   value: MetricValue;
   detail: string;
+  tone?: "sage" | "sand" | "blush" | "plum";
+  featured?: boolean;
 }) {
+  const tones = {
+    sage: "bg-accent text-accent-foreground",
+    sand: "bg-sand-soft text-sand-ink",
+    blush: "bg-blush-soft text-blush-ink",
+    plum: "bg-plum-soft text-plum",
+  } as const;
+
   return (
-    <Card className="flex h-full min-h-28 flex-col justify-between rounded-xl p-4 shadow-sm sm:p-5">
+    <div
+      className={`cach-panel flex h-full min-h-28 flex-col justify-between p-4 sm:p-5 ${
+        featured
+          ? "border-transparent bg-linear-135 from-primary to-pine-soft text-primary-foreground"
+          : ""
+      }`}
+    >
       <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-medium text-muted-foreground">{label}</span>
-        <span className="flex size-8 items-center justify-center rounded-lg bg-muted text-muted-foreground [&_svg]:size-4">
+        <span
+          className={`text-xs font-semibold ${featured ? "text-primary-foreground/75" : "text-muted-foreground"}`}
+        >
+          {label}
+        </span>
+        <span
+          className={`cach-badge-icon [&_svg]:size-4 ${featured ? "bg-primary-foreground/15 text-primary-foreground" : tones[tone]}`}
+        >
           {icon}
         </span>
       </div>
@@ -137,11 +172,17 @@ function MetricCard({
         {value === null ? (
           <Skeleton className="h-7 w-14" />
         ) : (
-          <p className="text-2xl font-semibold tabular-nums tracking-tight">{value ?? "—"}</p>
+          <p className="font-display text-2xl font-bold tabular-nums tracking-tight">
+            {value ?? "—"}
+          </p>
         )}
-        <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+        <p
+          className={`mt-1 text-[11px] ${featured ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+        >
+          {detail}
+        </p>
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -181,7 +222,7 @@ export function PatientQuickAccess({
   onViewAll: () => void;
 }) {
   return (
-    <Card className="mt-5 overflow-hidden rounded-xl shadow-sm">
+    <Card className="cach-panel mt-5 overflow-hidden">
       <div className="border-b border-border px-4 py-4 sm:px-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -404,7 +445,7 @@ export function ConsultationHistory({
   const maxMonth = Math.max(1, ...history.map((item) => item.count));
 
   return (
-    <Card className="mt-5 rounded-xl p-4 shadow-sm sm:p-5">
+    <Card className="cach-panel mt-5 p-4 sm:p-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Histórico de consultas</h2>
