@@ -104,10 +104,9 @@ export async function createConsultation(
   consultationDate?: string,
   observations?: string,
 ) {
-  const payload: { patient_id: string; consultation_date?: string; observations?: string | null } =
-    {
-      patient_id: patientId,
-    };
+  const payload: { patient_id: string; consultation_date?: string; observations?: string | null } = {
+    patient_id: patientId,
+  };
   if (consultationDate) payload.consultation_date = consultationDate;
   if (observations !== undefined) payload.observations = observations.trim() || null;
   return unwrap(
@@ -432,9 +431,7 @@ export async function saveMealPlan(consultationId: string, plan: MealPlan, ratio
     if (error) throw new Error(error.message);
     return;
   }
-  const { error } = await supabase
-    .from("meal_plans")
-    .insert({ consultation_id: consultationId, ...payload });
+  const { error } = await supabase.from("meal_plans").insert({ consultation_id: consultationId, ...payload });
   if (error) throw new Error(error.message);
 }
 

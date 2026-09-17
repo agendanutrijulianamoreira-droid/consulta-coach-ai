@@ -1,13 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,29 +38,15 @@ export function ConsultationRegistrationDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {patientName ? `Registrar consulta de ${patientName}?` : "Registrar nova consulta?"}
-          </DialogTitle>
-          <DialogDescription>
-            Escolha a data do atendimento. A consulta só será criada depois da sua confirmação.
-          </DialogDescription>
+          <DialogTitle>{patientName ? `Registrar consulta de ${patientName}?` : "Registrar nova consulta?"}</DialogTitle>
+          <DialogDescription>Escolha a data do atendimento. A consulta só será criada depois da sua confirmação.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-1.5">
-          <Label htmlFor="consult-registration-date" className="text-xs text-muted-foreground">
-            Data da consulta
-          </Label>
-          <Input
-            id="consult-registration-date"
-            type="date"
-            value={date}
-            onChange={(event) => setDate(event.target.value)}
-          />
+          <Label htmlFor="consult-registration-date" className="text-xs text-muted-foreground">Data da consulta</Label>
+          <Input id="consult-registration-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
         </div>
         <div className="grid gap-1.5">
-          <Label
-            htmlFor="consult-registration-observations"
-            className="text-xs text-muted-foreground"
-          >
+          <Label htmlFor="consult-registration-observations" className="text-xs text-muted-foreground">
             Observações da consulta
           </Label>
           <Textarea
@@ -90,11 +69,7 @@ export function ConsultationRegistrationDialog({
           >
             {declineLabel}
           </Button>
-          <Button
-            type="button"
-            disabled={isPending || !date}
-            onClick={() => onConfirm(date, observations)}
-          >
+          <Button type="button" disabled={isPending || !date} onClick={() => onConfirm(date, observations)}>
             {isPending ? "Abrindo…" : "Registrar consulta"}
           </Button>
         </DialogFooter>

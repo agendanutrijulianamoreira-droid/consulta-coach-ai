@@ -240,11 +240,7 @@ export function ConsultationHome() {
         }}
         onConfirm={(consultationDate, observations) => {
           if (consultationPatient) {
-            startConsultation.mutate({
-              patientId: consultationPatient.id,
-              consultationDate,
-              observations,
-            });
+            startConsultation.mutate({ patientId: consultationPatient.id, consultationDate, observations });
           }
         }}
         onDecline={() => {
