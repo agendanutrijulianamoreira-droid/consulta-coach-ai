@@ -73,12 +73,14 @@ export function PatientDialog({
   const [tagDraft, setTagDraft] = useState("");
   const [created, setCreated] = useState<Patient | null>(null);
   const [consultDate, setConsultDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [consultObservations, setConsultObservations] = useState("");
 
   useEffect(() => {
     if (!open) return;
     setTagDraft("");
     setCreated(null);
     setConsultDate(new Date().toISOString().slice(0, 10));
+    setConsultObservations("");
     setForm(
       patient
         ? {
@@ -97,12 +99,16 @@ export function PatientDialog({
     );
   }, [open, patient]);
 
-  const set = (key: keyof PatientInput) => (value: string) => setForm((prev) => ({ ...prev, [key]: value }));
+  const set = (key: keyof PatientInput) => (value: string) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
 
   const addTag = () => {
     const tag = tagDraft.trim().toLowerCase();
     if (!tag) return;
-    setForm((prev) => ({ ...prev, tags: prev.tags?.includes(tag) ? prev.tags : [...(prev.tags ?? []), tag] }));
+    setForm((prev) => ({
+      ...prev,
+      tags: prev.tags?.includes(tag) ? prev.tags : [...(prev.tags ?? []), tag],
+    }));
     setTagDraft("");
   };
 
@@ -117,7 +123,8 @@ export function PatientDialog({
         notes: form.notes?.trim() ? form.notes.trim() : null,
         cpf: form.cpf?.trim() ? form.cpf.trim() : null,
         is_pregnant: !!form.is_pregnant,
-        pregnancy_weeks: form.is_pregnant && form.pregnancy_weeks ? Number(form.pregnancy_weeks) : null,
+        pregnancy_weeks:
+          form.is_pregnant && form.pregnancy_weeks ? Number(form.pregnancy_weeks) : null,
         tags: form.tags ?? [],
       };
       return patient ? updatePatient(patient.id, payload) : createPatient(payload);
@@ -133,7 +140,7 @@ export function PatientDialog({
   });
 
   const startConsultation = useMutation({
-    mutationFn: async () => createConsultation(created!.id, consultDate),
+    mutationFn: async () => createConsultation(created!.id, consultDate, consultObservations),
     onSuccess: (consultation) => {
       void queryClient.invalidateQueries({ queryKey: ["consultations"] });
       void queryClient.invalidateQueries({ queryKey: ["consultation-dates"] });
@@ -153,11 +160,33 @@ export function PatientDialog({
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Registrar consulta de {created.name}?</DialogTitle>
-            <DialogDescription>Escolha a data do atendimento para já abrir a consulta, ou vá direto para o prontuário do paciente.</DialogDescription>
+            <DialogDescription>
+              Escolha a data do atendimento para já abrir a consulta, ou vá direto para o prontuário
+              do paciente.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-1.5">
-            <Label htmlFor="new-consult-date" className="text-xs text-muted-foreground">Data da consulta</Label>
-            <Input id="new-consult-date" type="date" value={consultDate} onChange={(e) => setConsultDate(e.target.value)} />
+            <Label htmlFor="new-consult-date" className="text-xs text-muted-foreground">
+              Data da consulta
+            </Label>
+            <Input
+              id="new-consult-date"
+              type="date"
+              value={consultDate}
+              onChange={(e) => setConsultDate(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="new-consult-observations" className="text-xs text-muted-foreground">
+              Observações da consulta
+            </Label>
+            <Textarea
+              id="new-consult-observations"
+              rows={3}
+              value={consultObservations}
+              onChange={(event) => setConsultObservations(event.target.value)}
+              placeholder="Motivo do atendimento, retorno ou contexto importante…"
+            />
           </div>
           <DialogFooter className="gap-2">
             <Button
@@ -170,7 +199,10 @@ export function PatientDialog({
             >
               Abrir prontuário
             </Button>
-            <Button onClick={() => startConsultation.mutate()} disabled={startConsultation.isPending}>
+            <Button
+              onClick={() => startConsultation.mutate()}
+              disabled={startConsultation.isPending}
+            >
               {startConsultation.isPending ? "Abrindo…" : "Registrar consulta"}
             </Button>
           </DialogFooter>
@@ -184,7 +216,9 @@ export function PatientDialog({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{patient ? "Editar paciente" : "Novo paciente"}</DialogTitle>
-          <DialogDescription>Dados demográficos e de contato usados nos cálculos clínicos e no parecer.</DialogDescription>
+          <DialogDescription>
+            Dados demográficos e de contato usados nos cálculos clínicos e no parecer.
+          </DialogDescription>
         </DialogHeader>
         <form
           className="grid gap-4 sm:grid-cols-2"
@@ -194,14 +228,26 @@ export function PatientDialog({
           }}
         >
           <Field className="sm:col-span-2" id="patient-name" label="Nome completo">
-            <Input id="patient-name" value={form.name} onChange={(e) => set("name")(e.target.value)} required />
+            <Input
+              id="patient-name"
+              value={form.name}
+              onChange={(e) => set("name")(e.target.value)}
+              required
+            />
           </Field>
           <Field id="patient-birth" label="Data de nascimento">
-            <Input id="patient-birth" type="date" value={form.birth_date ?? ""} onChange={(e) => set("birth_date")(e.target.value)} />
+            <Input
+              id="patient-birth"
+              type="date"
+              value={form.birth_date ?? ""}
+              onChange={(e) => set("birth_date")(e.target.value)}
+            />
           </Field>
           <Field id="patient-sex" label="Sexo biológico">
             <Select {...(form.sex ? { value: form.sex } : {})} onValueChange={set("sex")}>
-              <SelectTrigger id="patient-sex"><SelectValue placeholder="Selecione" /></SelectTrigger>
+              <SelectTrigger id="patient-sex">
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="feminino">Feminino</SelectItem>
                 <SelectItem value="masculino">Masculino</SelectItem>
@@ -209,35 +255,99 @@ export function PatientDialog({
             </Select>
           </Field>
           <Field id="patient-cpf" label="CPF">
-            <Input id="patient-cpf" inputMode="numeric" value={form.cpf ?? ""} onChange={(e) => set("cpf")(maskCpf(e.target.value))} placeholder="000.000.000-00" />
+            <Input
+              id="patient-cpf"
+              inputMode="numeric"
+              value={form.cpf ?? ""}
+              onChange={(e) => set("cpf")(maskCpf(e.target.value))}
+              placeholder="000.000.000-00"
+            />
           </Field>
           <Field id="patient-phone" label="Telefone">
-            <Input id="patient-phone" value={form.phone ?? ""} onChange={(e) => set("phone")(e.target.value)} placeholder="(00) 00000-0000" />
+            <Input
+              id="patient-phone"
+              value={form.phone ?? ""}
+              onChange={(e) => set("phone")(e.target.value)}
+              placeholder="(00) 00000-0000"
+            />
           </Field>
           <Field id="patient-email" label="E-mail">
-            <Input id="patient-email" type="email" value={form.email ?? ""} onChange={(e) => set("email")(e.target.value)} />
+            <Input
+              id="patient-email"
+              type="email"
+              value={form.email ?? ""}
+              onChange={(e) => set("email")(e.target.value)}
+            />
           </Field>
           {form.sex !== "masculino" && (
             <>
               <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
-                <Label htmlFor="patient-pregnant" className="text-xs text-muted-foreground">Gestante</Label>
-                <Switch id="patient-pregnant" checked={!!form.is_pregnant} onCheckedChange={(checked) => setForm((prev) => ({ ...prev, is_pregnant: checked, pregnancy_weeks: checked ? prev.pregnancy_weeks : null }))} />
+                <Label htmlFor="patient-pregnant" className="text-xs text-muted-foreground">
+                  Gestante
+                </Label>
+                <Switch
+                  id="patient-pregnant"
+                  checked={!!form.is_pregnant}
+                  onCheckedChange={(checked) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      is_pregnant: checked,
+                      pregnancy_weeks: checked ? prev.pregnancy_weeks : null,
+                    }))
+                  }
+                />
               </div>
               <Field id="patient-weeks" label="Semanas de gestação">
-                <Input id="patient-weeks" type="number" min={1} max={42} disabled={!form.is_pregnant} value={form.pregnancy_weeks ?? ""} onChange={(e) => setForm((prev) => ({ ...prev, pregnancy_weeks: e.target.value ? Number(e.target.value) : null }))} />
+                <Input
+                  id="patient-weeks"
+                  type="number"
+                  min={1}
+                  max={42}
+                  disabled={!form.is_pregnant}
+                  value={form.pregnancy_weeks ?? ""}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      pregnancy_weeks: e.target.value ? Number(e.target.value) : null,
+                    }))
+                  }
+                />
               </Field>
             </>
           )}
           <Field className="sm:col-span-2" id="patient-tags" label="Tags (para filtrar pacientes)">
             <div className="grid gap-2">
               <div className="flex gap-2">
-                <Input id="patient-tags" value={tagDraft} onChange={(e) => setTagDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addTag(); } }} placeholder="ex.: emagrecimento, gestante, esportista" />
-                <Button type="button" variant="secondary" onClick={addTag}>Adicionar</Button>
+                <Input
+                  id="patient-tags"
+                  value={tagDraft}
+                  onChange={(e) => setTagDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === ",") {
+                      e.preventDefault();
+                      addTag();
+                    }
+                  }}
+                  placeholder="ex.: emagrecimento, gestante, esportista"
+                />
+                <Button type="button" variant="secondary" onClick={addTag}>
+                  Adicionar
+                </Button>
               </div>
               {form.tags?.length ? (
                 <div className="flex flex-wrap gap-1.5">
                   {form.tags.map((tag) => (
-                    <Badge key={tag} variant="secondary" className="cursor-pointer" onClick={() => setForm((prev) => ({ ...prev, tags: (prev.tags ?? []).filter((t) => t !== tag) }))}>
+                    <Badge
+                      key={tag}
+                      variant="secondary"
+                      className="cursor-pointer"
+                      onClick={() =>
+                        setForm((prev) => ({
+                          ...prev,
+                          tags: (prev.tags ?? []).filter((t) => t !== tag),
+                        }))
+                      }
+                    >
                       {tag} ✕
                     </Badge>
                   ))}
@@ -246,11 +356,21 @@ export function PatientDialog({
             </div>
           </Field>
           <Field className="sm:col-span-2" id="patient-notes" label="Observações">
-            <Textarea id="patient-notes" rows={3} value={form.notes ?? ""} onChange={(e) => set("notes")(e.target.value)} placeholder="Histórico relevante, encaminhamentos, convênio…" />
+            <Textarea
+              id="patient-notes"
+              rows={3}
+              value={form.notes ?? ""}
+              onChange={(e) => set("notes")(e.target.value)}
+              placeholder="Histórico relevante, encaminhamentos, convênio…"
+            />
           </Field>
           <DialogFooter className="sm:col-span-2">
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button type="submit" disabled={!form.name.trim() || save.isPending}>{save.isPending ? "Salvando…" : "Salvar"}</Button>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={!form.name.trim() || save.isPending}>
+              {save.isPending ? "Salvando…" : "Salvar"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -258,6 +378,23 @@ export function PatientDialog({
   );
 }
 
-function Field({ id, label, children, className }: { id: string; label: string; children: React.ReactNode; className?: string }) {
-  return <div className={`grid gap-1.5 ${className ?? ""}`}><Label htmlFor={id} className="text-xs text-muted-foreground">{label}</Label>{children}</div>;
+function Field({
+  id,
+  label,
+  children,
+  className,
+}: {
+  id: string;
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`grid gap-1.5 ${className ?? ""}`}>
+      <Label htmlFor={id} className="text-xs text-muted-foreground">
+        {label}
+      </Label>
+      {children}
+    </div>
+  );
 }

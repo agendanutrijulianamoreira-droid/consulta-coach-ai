@@ -128,10 +128,12 @@ export function ConsultationHome() {
     mutationFn: ({
       patientId,
       consultationDate,
+      observations,
     }: {
       patientId: string;
       consultationDate: string;
-    }) => db.createConsultation(patientId, consultationDate),
+      observations: string;
+    }) => db.createConsultation(patientId, consultationDate, observations),
     onSuccess: async (consultation) => {
       setConsultationPatient(null);
       await Promise.all([
@@ -236,9 +238,13 @@ export function ConsultationHome() {
         onOpenChange={(open) => {
           if (!open) setConsultationPatient(null);
         }}
-        onConfirm={(consultationDate) => {
+        onConfirm={(consultationDate, observations) => {
           if (consultationPatient) {
-            startConsultation.mutate({ patientId: consultationPatient.id, consultationDate });
+            startConsultation.mutate({
+              patientId: consultationPatient.id,
+              consultationDate,
+              observations,
+            });
           }
         }}
         onDecline={() => {

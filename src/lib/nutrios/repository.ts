@@ -33,6 +33,7 @@ export interface Consultation {
   ended_at: string | null;
   duration_seconds: number;
   clinical_summary: string | null;
+  observations: string | null;
   created_at: string;
 }
 
@@ -98,12 +99,41 @@ export async function listConsultations() {
   ) as (Consultation & { patients: { name: string } | null })[];
 }
 
-export async function createConsultation(patientId: string, consultationDate?: string) {
-  const payload: { patient_id: string; consultation_date?: string } = { patient_id: patientId };
+export async function createConsultation(
+  patientId: string,
+  consultationDate?: string,
+  observations?: string,
+) {
+  const payload: { patient_id: string; consultation_date?: string; observations?: string | null } =
+    {
+      patient_id: patientId,
+    };
   if (consultationDate) payload.consultation_date = consultationDate;
+  if (observations !== undefined) payload.observations = observations.trim() || null;
   return unwrap(
     await supabase.from("consultations").insert(payload).select().single(),
   ) as Consultation;
+}
+
+/** Exclui a consulta e os registros clínicos dependentes protegidos por cascata no banco. */
+export async function deleteConsultation(id: string) {
+  const { error } = await supabase.from("consultations").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export type ConsultationReportRow = Pick<
+  Consultation,
+  "id" | "patient_id" | "status" | "consultation_date" | "observations" | "created_at"
+> & { patients: { name: string } | null };
+
+/** Fonte única do relatório operacional exibido em Meu Consultório. */
+export async function listConsultationReport() {
+  return unwrap(
+    await supabase
+      .from("consultations")
+      .select("id, patient_id, status, consultation_date, observations, created_at, patients(name)")
+      .order("consultation_date", { ascending: false }),
+  ) as unknown as ConsultationReportRow[];
 }
 
 export async function getPatient(id: string) {
@@ -402,7 +432,9 @@ export async function saveMealPlan(consultationId: string, plan: MealPlan, ratio
     if (error) throw new Error(error.message);
     return;
   }
-  const { error } = await supabase.from("meal_plans").insert({ consultation_id: consultationId, ...payload });
+  const { error } = await supabase
+    .from("meal_plans")
+    .insert({ consultation_id: consultationId, ...payload });
   if (error) throw new Error(error.message);
 }
 
