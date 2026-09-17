@@ -34,6 +34,7 @@ export interface Consultation {
   duration_seconds: number;
   clinical_summary: string | null;
   observations: string | null;
+  record_kind: "attendance" | "module";
   created_at: string;
 }
 
@@ -103,9 +104,11 @@ export async function createConsultation(
   patientId: string,
   consultationDate?: string,
   observations?: string,
+  recordKind: Consultation["record_kind"] = "attendance",
 ) {
-  const payload: { patient_id: string; consultation_date?: string; observations?: string | null } = {
+  const payload: { patient_id: string; consultation_date?: string; observations?: string | null; record_kind: Consultation["record_kind"] } = {
     patient_id: patientId,
+    record_kind: recordKind,
   };
   if (consultationDate) payload.consultation_date = consultationDate;
   if (observations !== undefined) payload.observations = observations.trim() || null;
@@ -131,6 +134,7 @@ export async function listConsultationReport() {
     await supabase
       .from("consultations")
       .select("id, patient_id, status, consultation_date, observations, created_at, patients(name)")
+      .eq("record_kind", "attendance")
       .order("consultation_date", { ascending: false }),
   ) as unknown as ConsultationReportRow[];
 }

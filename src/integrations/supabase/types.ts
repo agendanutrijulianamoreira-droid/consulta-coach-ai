@@ -147,6 +147,7 @@ export type Database = {
         Row: {
           clinical_summary: string | null
           observations: string | null
+          record_kind: string
           consultation_date: string
           created_at: string
           current_step: string
@@ -161,6 +162,7 @@ export type Database = {
         Insert: {
           clinical_summary?: string | null
           observations?: string | null
+          record_kind?: string
           consultation_date?: string
           created_at?: string
           current_step?: string
@@ -175,6 +177,7 @@ export type Database = {
         Update: {
           clinical_summary?: string | null
           observations?: string | null
+          record_kind?: string
           consultation_date?: string
           created_at?: string
           current_step?: string

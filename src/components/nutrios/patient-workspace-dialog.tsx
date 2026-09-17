@@ -81,7 +81,8 @@ export function PatientWorkspaceDialog({
     enabled: open && !!patientId,
   });
 
-  const rows = useMemo(() => dossier.data?.consultations ?? [], [dossier.data?.consultations]);
+  const allRows = useMemo(() => dossier.data?.consultations ?? [], [dossier.data?.consultations]);
+  const rows = useMemo(() => allRows.filter((consultation) => consultation.record_kind === "attendance"), [allRows]);
 
   const registerConsultation = useMutation({
     mutationFn: ({ date, observations }: { date: string; observations: string }) => db.createConsultation(patientId!, date, observations),
@@ -158,7 +159,7 @@ export function PatientWorkspaceDialog({
             {section === "perfil" ? (
               <Profile
                 patient={p ?? null}
-                rows={rows}
+                rows={allRows}
                 onEdit={() => setEditing(true)}
                 onOpenSection={selectSection}
               />
@@ -211,7 +212,7 @@ function ExamsSection({
   onOpen: (id: string | null) => void;
 }) {
   const create = useMutation({
-    mutationFn: () => db.createConsultation(patientId, new Date().toISOString().slice(0, 10)),
+    mutationFn: () => db.createConsultation(patientId, new Date().toISOString().slice(0, 10), undefined, "module"),
     onSuccess: (consultation) => onOpen(consultation.id),
     onError: (error: Error) => toast.error(error.message),
   });

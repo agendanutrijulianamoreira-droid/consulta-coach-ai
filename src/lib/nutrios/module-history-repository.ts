@@ -144,7 +144,7 @@ export async function toggleMealPlanFavorite(consultationId: string, isFavorite:
 }
 
 export async function createModuleRecord(patientId: string, consultationDate: string) {
-  return db.createConsultation(patientId, consultationDate);
+  return db.createConsultation(patientId, consultationDate, undefined, "module");
 }
 
 export async function duplicateClinicalModule(
@@ -153,7 +153,7 @@ export async function duplicateClinicalModule(
   module: ClinicalModuleKey,
   consultationDate: string,
 ) {
-  const target = await db.createConsultation(patientId, consultationDate);
+  const target = await db.createConsultation(patientId, consultationDate, undefined, "module");
   try {
     if (module === "consulta") {
       await copyTranscript(sourceConsultationId, target.id);

@@ -543,7 +543,8 @@ function EmptyMethod({ onCreate }: { onCreate: () => void }) {
 function ConsultationReport() {
   const report = useQuery({ queryKey: ["consultation-report"], queryFn: listConsultationReport });
   const rows = report.data ?? [];
-  const monthKey = new Date().toISOString().slice(0, 7);
+  const now = new Date();
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const currentMonth = rows.filter((row) => row.consultation_date.slice(0, 7) === monthKey).length;
   const uniquePatients = new Set(rows.map((row) => row.patient_id)).size;
 
