@@ -102,10 +102,8 @@ export async function getClinicalModuleHistory(patientId: string): Promise<Clini
     empty.anthro[row.consultation_id] = (row.data ?? {}) as Record<string, string | undefined>;
   }
   for (const row of conducts.data ?? []) {
-    empty.calculations[row.consultation_id] = {
-      kcal: row.kcal,
-      energy: (row.energy ?? {}) as Record<string, unknown>,
-    };
+    const energy = (row.energy ?? {}) as Record<string, unknown>;
+    if (Object.keys(energy).length) empty.calculations[row.consultation_id] = { kcal: row.kcal, energy };
   }
   for (const row of recall.data ?? []) {
     empty.recallCount[row.consultation_id] = (empty.recallCount[row.consultation_id] ?? 0) + 1;
@@ -145,6 +143,38 @@ export async function toggleMealPlanFavorite(consultationId: string, isFavorite:
 
 export async function createModuleRecord(patientId: string, consultationDate: string) {
   return db.createConsultation(patientId, consultationDate, undefined, "module");
+}
+
+/** Exclui somente os dados pertencentes à aba escolhida, sem apagar a consulta. */
+export async function deleteClinicalModuleRecord(consultationId: string, module: ClinicalModuleKey) {
+  if (module === "anamnese") return removeRows("anamnesis", consultationId);
+  if (module === "antropometria") return removeRows("anthropometry", consultationId);
+  if (module === "recordatorio") return removeRows("food_recall_items", consultationId);
+  if (module === "diagnostico") {
+    const { error } = await clinicalSupabase.from("diagnoses").delete().eq("consultation_id", consultationId);
+    if (error) throw new Error(error.message);
+    return;
+  }
+  if (module === "plano") return removeRows("meal_plans", consultationId);
+  if (module === "calculos") {
+    const { error } = await supabase.from("conducts").update({ energy: json({}), kcal: null }).eq("consultation_id", consultationId);
+    if (error) throw new Error(error.message);
+    return;
+  }
+  if (module === "parecer") {
+    const current = await db.getRecord(consultationId);
+    const sections = { ...(current.sections ?? {}) };
+    delete sections["parecer"];
+    const { error } = await supabase.from("records").update({ report: null, sections: json(sections) }).eq("consultation_id", consultationId);
+    if (error) throw new Error(error.message);
+    return;
+  }
+  if (module === "consulta") return removeRows("transcript_segments", consultationId);
+}
+
+async function removeRows(table: "anamnesis" | "anthropometry" | "food_recall_items" | "meal_plans" | "transcript_segments", consultationId: string) {
+  const { error } = await supabase.from(table).delete().eq("consultation_id", consultationId);
+  if (error) throw new Error(error.message);
 }
 
 export async function duplicateClinicalModule(

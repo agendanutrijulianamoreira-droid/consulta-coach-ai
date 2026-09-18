@@ -148,6 +148,7 @@ export type Database = {
           clinical_summary: string | null
           observations: string | null
           record_kind: string
+          visible_in_history: boolean
           consultation_date: string
           created_at: string
           current_step: string
@@ -163,6 +164,7 @@ export type Database = {
           clinical_summary?: string | null
           observations?: string | null
           record_kind?: string
+          visible_in_history?: boolean
           consultation_date?: string
           created_at?: string
           current_step?: string
@@ -178,6 +180,7 @@ export type Database = {
           clinical_summary?: string | null
           observations?: string | null
           record_kind?: string
+          visible_in_history?: boolean
           consultation_date?: string
           created_at?: string
           current_step?: string

@@ -45,6 +45,7 @@ type ConsultationWorkspaceProps = {
   activeStep?: number | undefined;
   embedded?: boolean | undefined;
   onOpenReport?: (() => void) | undefined;
+  onRecordingChange?: ((recording: boolean) => void) | undefined;
 };
 
 export function ConsultationWorkspace({
@@ -52,6 +53,7 @@ export function ConsultationWorkspace({
   activeStep,
   embedded = false,
   onOpenReport,
+  onRecordingChange,
 }: ConsultationWorkspaceProps) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -90,6 +92,17 @@ export function ConsultationWorkspace({
     if (activeStep === undefined) return;
     setStep(activeStep);
   }, [activeStep]);
+
+  useEffect(() => {
+    onRecordingChange?.(recording);
+    return () => onRecordingChange?.(false);
+  }, [onRecordingChange, recording]);
+
+  useEffect(() => () => {
+    const activeRecorder = recorder.current;
+    recorder.current = null;
+    if (activeRecorder) void activeRecorder.stop();
+  }, []);
 
   const patient = consultation.data?.patients;
   const profile = useMemo(() => ({ age: ageFromBirthDate(patient?.birth_date), sex: patient?.sex ?? null }), [patient?.birth_date, patient?.sex]);
@@ -130,12 +143,6 @@ export function ConsultationWorkspace({
       sex: current.sex ?? sex,
     }));
   }, [step, anthro, profile, analysis.leanMass]);
-
-  useEffect(() => {
-    if (step !== 7 || plan || !loaded || !(foods.data?.length) || busy) return;
-    void generatePlan(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, plan, loaded, foods.data, busy]);
 
   useEffect(() => { if (!recording && consultation.data?.duration_seconds) { setSeconds(consultation.data.duration_seconds); secondsRef.current = consultation.data.duration_seconds; } }, [consultation.data?.duration_seconds, recording]);
   useEffect(() => { secondsRef.current = seconds; }, [seconds]);
@@ -234,7 +241,7 @@ export function ConsultationWorkspace({
         toast.success("Gravação encerrada. A transcrição será usada para atualizar a anamnese automaticamente."); return;
       }
       if (!navigator.mediaDevices?.getUserMedia) { toast.error("Este navegador não disponibiliza acesso ao microfone. Use uma versão atualizada do Chrome, Edge ou Safari."); return; }
-      recorder.current = await startRecording(handleWindow, 12000, secondsRef.current); setRecording(true);
+      recorder.current = await startRecording(handleWindow, 6000, secondsRef.current); setRecording(true);
       await db.updateConsultation(id, { status: "em_andamento", started_at: consultation.data?.started_at ?? new Date().toISOString(), ended_at: null });
       await queryClient.invalidateQueries({ queryKey: ["consultation", id] });
     } catch (error) {
@@ -316,10 +323,10 @@ export function ConsultationWorkspace({
     <main className={`mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 ${embedded ? "sm:py-6" : "sm:py-8"}`}>
       <div className="mb-6 flex items-end justify-between gap-4"><div><p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Etapa {step + 1} de {CONSULTATION_STEPS.length}</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">{CONSULTATION_STEPS[step]}</h1><p className="mt-1 text-sm text-muted-foreground">{HINTS[step]}</p></div><div className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex"><ClipboardList className="size-4" />{completed.filter(Boolean).length}/{CONSULTATION_STEPS.length} etapas com dados</div></div>
 
-      {step === 0 ? <section className="grid gap-6 lg:grid-cols-[1fr_300px]"><div className="min-h-[360px] rounded-md border border-border"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3"><div><h2 className="text-sm font-medium">Transcrição da consulta</h2><p className="mt-0.5 text-xs text-muted-foreground">Cada trecho é preservado localmente antes de ser enviado para transcrição.</p></div><span className="text-xs tabular-nums text-muted-foreground">{segments.data?.length ?? 0} falas</span></div><div className="max-h-[560px] space-y-3 overflow-y-auto p-4" aria-live="polite">{(segments.data ?? []).map((segment) => <p key={segment.id} className="text-sm leading-6"><span className={segment.speaker === "nutricionista" ? "font-medium text-primary" : "font-medium text-muted-foreground"}>{segment.speaker === "nutricionista" ? "Nutricionista" : "Paciente"}:</span>{" "}{segment.content}</p>)}{!segments.data?.length ? <div className="flex min-h-64 flex-col items-center justify-center text-center"><Mic className="size-6 text-muted-foreground" /><p className="mt-3 text-sm text-muted-foreground">Inicie a consulta para capturar a primeira fala.</p><p className="mt-1 max-w-sm text-xs leading-5 text-muted-foreground">Se a conexão cair, o Cach AI continua preservando as janelas de áudio neste dispositivo e tenta sincronizar quando a internet voltar.</p></div> : null}</div></div><aside className="space-y-3"><div className="rounded-md border border-border p-4"><div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2 text-sm font-medium">{online ? <Cloud /> : <CloudOff />}{online ? "Conectado" : "Sem internet"}</div>{processingCount > 0 ? <LoaderCircle className="size-4 animate-spin text-muted-foreground" /> : null}</div><div className="mt-3 space-y-1.5 text-xs leading-5 text-muted-foreground"><p>{recording ? "Microfone ativo e gravação em andamento." : finalizingAudio ? "Aguardando o último trecho ser preservado." : "Gravação parada."}</p><p>{pendingCount > 0 ? `${pendingCount} trecho${pendingCount === 1 ? "" : "s"} salvo${pendingCount === 1 ? "" : "s"} localmente aguardando sincronização.` : "Tudo sincronizado com o prontuário."}</p></div>{pendingCount > 0 && online ? <Button type="button" variant="outline" size="sm" className="mt-3 w-full" disabled={processingCount > 0} onClick={() => void syncPending()}><RefreshCw /> Tentar sincronizar agora</Button> : null}</div><InfoCard icon={<Sparkles />} title="Anamnese automática" text="Ao encerrar e sincronizar a gravação, a conversa alimenta a anamnese em segundo plano sem substituir o que você já revisou." /><InfoCard icon={<FileText />} title="Proteção contra perda" text="As etapas clínicas são salvas automaticamente enquanto você trabalha e novamente ao sair da consulta." /></aside></section> : null}
+      {step === 0 ? <section className="grid gap-6 lg:grid-cols-[1fr_300px]"><div className="min-h-[360px] rounded-md border border-border"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3"><div><h2 className="text-sm font-medium">Transcrição da consulta</h2><p className="mt-0.5 text-xs text-muted-foreground">Cada trecho é preservado localmente antes de ser enviado para transcrição.</p></div><span className="text-xs tabular-nums text-muted-foreground">{segments.data?.length ?? 0} falas</span></div><div className="max-h-[560px] space-y-3 overflow-y-auto p-4" aria-live="polite">{(segments.data ?? []).map((segment) => <p key={segment.id} className="text-sm leading-6"><span className={segment.speaker === "nutricionista" ? "font-medium text-primary" : "font-medium text-muted-foreground"}>{segment.speaker === "nutricionista" ? "Nutricionista" : "Paciente"}:</span>{" "}{segment.content}</p>)}{!segments.data?.length ? <div className="flex min-h-64 flex-col items-center justify-center text-center"><Mic className="size-6 text-muted-foreground" /><p className="mt-3 text-sm text-muted-foreground">Inicie a consulta para capturar a primeira fala.</p><p className="mt-1 max-w-sm text-xs leading-5 text-muted-foreground">Se a conexão cair, o Cach AI continua preservando as janelas de áudio neste dispositivo e tenta sincronizar quando a internet voltar.</p></div> : null}</div></div><aside className="space-y-3"><div className="rounded-md border border-border p-4"><div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2 text-sm font-medium">{online ? <Cloud /> : <CloudOff />}{online ? "Conectado" : "Sem internet"}</div>{processingCount > 0 ? <LoaderCircle className="size-4 animate-spin text-muted-foreground" /> : null}</div><div className="mt-3 space-y-1.5 text-xs leading-5 text-muted-foreground"><p>{recording ? "Microfone ativo e gravação em andamento." : finalizingAudio ? "Aguardando o último trecho ser preservado." : "Gravação parada."}</p><p>{pendingCount > 0 ? `${pendingCount} trecho${pendingCount === 1 ? "" : "s"} salvo${pendingCount === 1 ? "" : "s"} localmente aguardando sincronização.` : "Tudo sincronizado com o prontuário."}</p></div>{pendingCount > 0 && online ? <Button type="button" variant="outline" size="sm" className="mt-3 w-full" disabled={processingCount > 0} onClick={() => void syncPending()}><RefreshCw /> Tentar sincronizar agora</Button> : null}</div><InfoCard icon={<Sparkles />} title="Anamnese em tempo real" text="A cada trecho transcrito, a conversa atualiza sugestões da anamnese sem substituir campos já revisados." /><InfoCard icon={<FileText />} title="Proteção contra perda" text="A gravação continua ao trocar de aba, e as etapas clínicas são salvas automaticamente enquanto você trabalha." /></aside></section> : null}
 
       <div className={step === 1 ? "" : "hidden"}>
-        <CompactAnamnesisPanel consultationId={id} fields={anamnesis} onChange={setAnamnesis} transcript={transcriptText} canAutoExtract={loaded && !recording && !finalizingAudio && processingCount === 0 && pendingCount === 0} />
+        <CompactAnamnesisPanel consultationId={id} fields={anamnesis} onChange={setAnamnesis} transcript={transcriptText} canAutoExtract={loaded && processingCount === 0 && pendingCount === 0} />
       </div>
       {step === 2 ? <div className="space-y-4"><AnthropometryPanel consultationId={id} data={anthro} interpretation={interpretation} profile={profile} formula={formula} onFormulaChange={setFormula} onChange={setAnthro} /><ActionBar busy={busy === "antro"} disabled={busy !== null} label="Interpretar e salvar avaliação" icon={<Sparkles />} onAction={() => void run("antro", async () => { const result = await interpretAnthropometry({ data: { data: `${JSON.stringify(anthro)}\n\n${analysisText}` } }); setInterpretation(result.interpretation); await db.saveAnthropometry(id, { ...anthro, formula }, result.interpretation); })} secondary={<Button size="sm" variant="outline" onClick={() => void run("save-antro", async () => db.saveAnthropometry(id, { ...anthro, formula }, interpretation))}><Save /> Salvar agora</Button>} /></div> : null}
       {step === 3 ? <div className="space-y-4"><EnergyPanel consultationId={id} value={energy} onChange={setEnergy} /><ActionBar busy={busy === "energia"} disabled={busy !== null} label="Salvar agora" icon={<Save />} onAction={() => void run("energia", async () => db.saveConduct(id, { ...conduct, kcal: energyResult.targetKcal ?? energyResult.maintenanceKcal ?? conduct.kcal, energy: energy as unknown as Record<string, unknown> }))} /></div> : null}

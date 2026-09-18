@@ -11,6 +11,7 @@ import { ClinicalModuleSection, type ClinicalSection } from "@/components/nutrio
 import { ConsultationWorkspace } from "@/components/nutrios/consultation-workspace";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import * as db from "@/lib/nutrios/repository";
+import * as labDb from "@/modules/exames/infrastructure/labs-repository";
 
 export type WorkspaceSection =
   | "perfil"
@@ -57,6 +58,11 @@ const CLINICAL_SECTIONS = new Set<WorkspaceSection>([
   "parecer",
 ]);
 
+const WORKSPACE_STEPS: Partial<Record<WorkspaceSection, number>> = {
+  consulta: 0, anamnese: 1, antropometria: 2, calculos: 3, recordatorio: 4,
+  exames: 5, diagnostico: 6, plano: 7, parecer: 7,
+};
+
 export function PatientWorkspaceDialog({
   open,
   patientId,
@@ -68,6 +74,7 @@ export function PatientWorkspaceDialog({
   const [consultationId, setConsultationId] = useState<string | null>(initialConsultationId ?? null);
   const [editing, setEditing] = useState(false);
   const [registering, setRegistering] = useState(false);
+  const [consultationRecording, setConsultationRecording] = useState(false);
   const queryClient = useQueryClient();
 
   const patient = useQuery({
@@ -82,7 +89,7 @@ export function PatientWorkspaceDialog({
   });
 
   const allRows = useMemo(() => dossier.data?.consultations ?? [], [dossier.data?.consultations]);
-  const rows = useMemo(() => allRows.filter((consultation) => consultation.record_kind === "attendance"), [allRows]);
+  const rows = useMemo(() => allRows.filter((consultation) => consultation.record_kind === "attendance" && consultation.visible_in_history), [allRows]);
 
   const registerConsultation = useMutation({
     mutationFn: ({ date, observations }: { date: string; observations: string }) => db.createConsultation(patientId!, date, observations),
@@ -107,7 +114,6 @@ export function PatientWorkspaceDialog({
 
   const selectSection = (next: WorkspaceSection) => {
     setSection(next);
-    setConsultationId(null);
   };
 
   const p = patient.data;
@@ -156,6 +162,15 @@ export function PatientWorkspaceDialog({
           </aside>
 
           <main className="min-h-0 overflow-y-auto bg-background">
+            {consultationId && patientId ? (
+              <div className={CLINICAL_SECTIONS.has(section) || section === "exames" ? "" : "hidden"}>
+                <div className="border-b border-border px-6 py-3">
+                  <Button type="button" variant="ghost" size="sm" disabled={consultationRecording} onClick={() => setConsultationId(null)}><ArrowLeft /> {consultationRecording ? "Encerre a gravação para voltar aos registros" : "Voltar aos registros desta aba"}</Button>
+                </div>
+                <ConsultationWorkspace key={`${patientId}-${consultationId}`} consultationId={consultationId} activeStep={WORKSPACE_STEPS[section] ?? 0} embedded onRecordingChange={setConsultationRecording} />
+              </div>
+            ) : null}
+
             {section === "perfil" ? (
               <Profile
                 patient={p ?? null}
@@ -169,19 +184,19 @@ export function PatientWorkspaceDialog({
                 patientId={patientId!}
                 onNew={() => setRegistering(true)}
               />
-            ) : section === "exames" && patientId ? (
+            ) : section === "exames" && patientId && !consultationId ? (
               <ExamsSection
                 patientId={patientId}
                 rows={rows}
                 consultationId={consultationId}
                 onOpen={setConsultationId}
               />
-            ) : CLINICAL_SECTIONS.has(section) && patientId ? (
+            ) : CLINICAL_SECTIONS.has(section) && patientId && !consultationId ? (
               <ClinicalModuleSection
-                key={`${patientId}-${section}-${consultationId ?? "list"}`}
+                key={patientId}
                 patientId={patientId}
                 section={section as ClinicalSection}
-                initialConsultationId={consultationId}
+                onOpenConsultation={setConsultationId}
               />
             ) : null}
           </main>
@@ -211,9 +226,23 @@ function ExamsSection({
   consultationId: string | null;
   onOpen: (id: string | null) => void;
 }) {
+  const queryClient = useQueryClient();
+  const [removing, setRemoving] = useState<db.Consultation | null>(null);
   const create = useMutation({
     mutationFn: () => db.createConsultation(patientId, new Date().toISOString().slice(0, 10), undefined, "module"),
     onSuccess: (consultation) => onOpen(consultation.id),
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const remove = useMutation({
+    mutationFn: (consultationId: string) => labDb.deleteLabAssessment(consultationId),
+    onSuccess: async (_, consultationId) => {
+      setRemoving(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["lab-results", consultationId] }),
+        queryClient.invalidateQueries({ queryKey: ["lab-assessment", consultationId] }),
+      ]);
+      toast.success("Exames excluídos somente desta aba.");
+    },
     onError: (error: Error) => toast.error(error.message),
   });
 
@@ -254,9 +283,7 @@ function ExamsSection({
             <div key={consultation.id} className="grid gap-3 py-4 sm:grid-cols-[170px_1fr_auto] sm:items-center">
               <span className="text-sm font-medium">{formatDate(consultation.consultation_date ?? consultation.created_at)}</span>
               <span className="text-xs text-muted-foreground">Exames vinculados a esta consulta</span>
-              <Button type="button" size="sm" variant="ghost" onClick={() => onOpen(consultation.id)}>
-                <FileText /> Abrir exames
-              </Button>
+              <div className="flex items-center justify-end gap-1"><Button type="button" size="sm" variant="ghost" onClick={() => onOpen(consultation.id)}><FileText /> Abrir exames</Button><Button type="button" size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setRemoving(consultation)}><Trash2 /> Excluir</Button></div>
             </div>
           ))}
         </div>
@@ -268,6 +295,9 @@ function ExamsSection({
           <Button className="mt-5" disabled={create.isPending} onClick={() => create.mutate()}><Plus /> Novo exame</Button>
         </div>
       )}
+      <AlertDialog open={!!removing} onOpenChange={(open) => !open && setRemoving(null)}>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir exames?</AlertDialogTitle><AlertDialogDescription>Somente os exames laboratoriais deste registro serão excluídos. Os demais dados da consulta permanecerão intactos.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction disabled={remove.isPending} onClick={(event) => { event.preventDefault(); if (removing) remove.mutate(removing.id); }}>{remove.isPending ? "Excluindo…" : "Excluir exames"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -343,7 +373,7 @@ function History({
   const queryClient = useQueryClient();
   const [removing, setRemoving] = useState<db.Consultation | null>(null);
   const remove = useMutation({
-    mutationFn: (id: string) => db.deleteConsultation(id),
+    mutationFn: (id: string) => db.hideConsultationFromHistory(id),
     onSuccess: async () => {
       setRemoving(null);
       await Promise.all([
@@ -352,7 +382,7 @@ function History({
         queryClient.invalidateQueries({ queryKey: ["consultation-dates"] }),
         queryClient.invalidateQueries({ queryKey: ["consultation-report"] }),
       ]);
-      toast.success("Consulta excluída do histórico.");
+      toast.success("Consulta removida do histórico e do relatório. O prontuário foi preservado.");
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -376,7 +406,7 @@ function History({
         )) : <p className="py-10 text-sm text-muted-foreground">Nenhuma consulta registrada.</p>}
       </div>
       <AlertDialog open={!!removing} onOpenChange={(open) => !open && setRemoving(null)}>
-        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir esta consulta?</AlertDialogTitle><AlertDialogDescription>A consulta de {removing ? formatDate(removing.consultation_date ?? removing.created_at) : ""} e todos os dados clínicos vinculados serão excluídos permanentemente.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction disabled={remove.isPending} onClick={(event) => { event.preventDefault(); if (removing) remove.mutate(removing.id); }}>{remove.isPending ? "Excluindo…" : "Excluir consulta"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remover do histórico?</AlertDialogTitle><AlertDialogDescription>A consulta de {removing ? formatDate(removing.consultation_date ?? removing.created_at) : ""} deixará de aparecer neste histórico e no relatório de Meu Consultório. Anamnese, exames, avaliações, plano e demais dados clínicos permanecerão no prontuário e poderão ser excluídos somente em suas próprias abas.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction disabled={remove.isPending} onClick={(event) => { event.preventDefault(); if (removing) remove.mutate(removing.id); }}>{remove.isPending ? "Removendo…" : "Remover do histórico"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
       </AlertDialog>
     </div>
   );

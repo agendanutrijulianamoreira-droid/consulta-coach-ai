@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Copy, FileText, List, Plus, Star, TrendingUp } from "lucide-react";
+import { ArrowLeft, Copy, FileText, List, Plus, Star, Trash2, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ConsultationWorkspace } from "@/components/nutrios/consultation-workspace";
 import * as historyDb from "@/lib/nutrios/module-history-repository";
 
@@ -26,13 +27,15 @@ type Props = {
   section: ClinicalSection;
   initialConsultationId?: string | null | undefined;
   onReportGenerated?: (() => void) | undefined;
+  onOpenConsultation?: ((consultationId: string) => void) | undefined;
 };
 
-export function ClinicalModuleSection({ patientId, section, initialConsultationId = null, onReportGenerated }: Props) {
+export function ClinicalModuleSection({ patientId, section, initialConsultationId = null, onReportGenerated, onOpenConsultation }: Props) {
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<"list" | "evolution" | "editor">(initialConsultationId ? "editor" : "list");
   const [selectedId, setSelectedId] = useState<string | null>(initialConsultationId);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [removing, setRemoving] = useState<historyDb.ClinicalModuleHistory["consultations"][number] | null>(null);
 
   const history = useQuery({
     queryKey: ["clinical-module-history", patientId],
@@ -62,6 +65,7 @@ export function ClinicalModuleSection({ patientId, section, initialConsultationI
   const createRecord = useMutation({
     mutationFn: () => historyDb.createModuleRecord(patientId, date),
     onSuccess: async (consultation) => {
+      if (onOpenConsultation) { onOpenConsultation(consultation.id); await refresh(); return; }
       setSelectedId(consultation.id);
       setMode("editor");
       await refresh();
@@ -73,6 +77,7 @@ export function ClinicalModuleSection({ patientId, section, initialConsultationI
     mutationFn: (sourceId: string) => historyDb.duplicateClinicalModule(patientId, sourceId, section, date),
     onSuccess: async (consultation) => {
       toast.success(`${capitalize(LABELS[section].singular)} duplicado.`);
+      if (onOpenConsultation) { onOpenConsultation(consultation.id); await refresh(); return; }
       setSelectedId(consultation.id);
       setMode("editor");
       await refresh();
@@ -88,8 +93,13 @@ export function ClinicalModuleSection({ patientId, section, initialConsultationI
     onError: (error: Error) => toast.error(error.message),
   });
 
-  const selectedReport = selectedId ? history.data?.reports[selectedId] : undefined;
   const label = LABELS[section];
+  const remove = useMutation({
+    mutationFn: (consultationId: string) => historyDb.deleteClinicalModuleRecord(consultationId, section),
+    onSuccess: async () => { setRemoving(null); toast.success(`${capitalize(label.singular)} excluído somente desta aba.`); await refresh(); },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const selectedReport = selectedId ? history.data?.reports[selectedId] : undefined;
 
   if (mode === "editor" && selectedId) {
     if (section === "parecer" && selectedReport) {
@@ -184,13 +194,14 @@ export function ClinicalModuleSection({ patientId, section, initialConsultationI
                 {mode === "list" ? <p className="text-xs text-muted-foreground">{summary}</p> : null}
                 {mode === "list" ? (
                   <div className="flex flex-wrap items-center justify-end gap-1">
-                    <Button size="sm" variant="ghost" onClick={() => { setSelectedId(consultation.id); setMode("editor"); }}>Abrir</Button>
+                    <Button size="sm" variant="ghost" onClick={() => { if (onOpenConsultation) onOpenConsultation(consultation.id); else { setSelectedId(consultation.id); setMode("editor"); } }}>Abrir</Button>
                     <Button size="sm" variant="ghost" disabled={duplicate.isPending} onClick={() => duplicate.mutate(consultation.id)}><Copy /> Duplicar</Button>
                     {section === "plano" && plan ? (
                       <Button size="sm" variant="ghost" disabled={favorite.isPending} onClick={() => favorite.mutate({ consultationId: consultation.id, value: !plan.isFavorite })}>
                         <Star className={plan.isFavorite ? "fill-current" : ""} />{plan.isFavorite ? "Desfavoritar" : "Favoritar"}
                       </Button>
                     ) : null}
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" disabled={remove.isPending} onClick={() => setRemoving(consultation)}><Trash2 /> Excluir</Button>
                   </div>
                 ) : null}
               </div>
@@ -198,6 +209,9 @@ export function ClinicalModuleSection({ patientId, section, initialConsultationI
           })}
         </div>
       ) : null}
+      <AlertDialog open={!!removing} onOpenChange={(open) => !open && setRemoving(null)}>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir {label.singular}?</AlertDialogTitle><AlertDialogDescription>Somente os dados desta aba serão excluídos. Os demais registros clínicos da consulta e o prontuário permanecerão intactos.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction disabled={remove.isPending} onClick={(event) => { event.preventDefault(); if (removing) remove.mutate(removing.id); }}>{remove.isPending ? "Excluindo…" : `Excluir ${label.singular}`}</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

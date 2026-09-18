@@ -35,6 +35,7 @@ export interface Consultation {
   clinical_summary: string | null;
   observations: string | null;
   record_kind: "attendance" | "module";
+  visible_in_history: boolean;
   created_at: string;
 }
 
@@ -117,9 +118,9 @@ export async function createConsultation(
   ) as Consultation;
 }
 
-/** Exclui a consulta e os registros clínicos dependentes protegidos por cascata no banco. */
-export async function deleteConsultation(id: string) {
-  const { error } = await supabase.from("consultations").delete().eq("id", id);
+/** Oculta somente o registro administrativo; o prontuário clínico permanece intacto. */
+export async function hideConsultationFromHistory(id: string) {
+  const { error } = await supabase.from("consultations").update({ visible_in_history: false }).eq("id", id);
   if (error) throw new Error(error.message);
 }
 
@@ -135,6 +136,7 @@ export async function listConsultationReport() {
       .from("consultations")
       .select("id, patient_id, status, consultation_date, observations, created_at, patients(name)")
       .eq("record_kind", "attendance")
+      .eq("visible_in_history", true)
       .order("consultation_date", { ascending: false }),
   ) as unknown as ConsultationReportRow[];
 }

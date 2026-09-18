@@ -283,7 +283,7 @@ export function CompactAnamnesisPanel({
         {versions.data?.length ? <div className="mt-4 border-t border-border pt-3"><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Versões preservadas nesta consulta</p><div className="mt-2 flex flex-wrap gap-2">{versions.data.slice(0, 5).map((version) => <Button key={version.id} type="button" size="sm" variant="ghost" onClick={() => void loadVersion(version.fields)}><RotateCcw /> {formatDateTime(version.savedAt)}</Button>)}</div></div> : null}
       </section>
 
-      {canAutoExtract && transcript.trim() ? <p className="flex items-center gap-2 px-1 text-xs text-muted-foreground"><Sparkles className="size-3.5" /> Ao finalizar a gravação e sincronizar a transcrição, a anamnese é atualizada automaticamente sem sobrescrever campos revisados.</p> : null}
+      {canAutoExtract && transcript.trim() ? <p className="flex items-center gap-2 px-1 text-xs text-muted-foreground"><Sparkles className="size-3.5" /> A anamnese acompanha os trechos transcritos durante a consulta sem sobrescrever campos revisados.</p> : null}
     </div>
   );
 }
