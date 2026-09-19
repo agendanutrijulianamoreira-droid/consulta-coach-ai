@@ -17,7 +17,7 @@ interface CallOptions {
 
 export async function callAi({ instructions, input, schema, effort = "low" }: CallOptions): Promise<string> {
   const apiKey = process.env["LOVABLE_API_KEY"];
-  if (!apiKey) throw new Error("LOVABLE_API_KEY ausente");
+  if (!apiKey) throw new Error("A integração de IA não está configurada no servidor.");
 
   const body: Record<string, unknown> = {
     model: MODEL,

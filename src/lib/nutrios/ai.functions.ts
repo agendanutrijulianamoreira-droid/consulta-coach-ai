@@ -32,7 +32,7 @@ const ANAMNESIS_KEYS = [
 
 async function transcribeWav(audioBase64: string) {
   const apiKey = process.env["LOVABLE_API_KEY"];
-  if (!apiKey) throw new Error("LOVABLE_API_KEY ausente");
+  if (!apiKey) throw new Error("A integração de IA não está configurada no servidor.");
   const binary = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
   const form = new FormData();
   form.append("model", "openai/gpt-4o-transcribe");
@@ -153,7 +153,7 @@ export const transcribeChunk = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const apiKey = process.env["LOVABLE_API_KEY"];
-    if (!apiKey) throw new Error("LOVABLE_API_KEY ausente");
+    if (!apiKey) throw new Error("A integração de IA não está configurada no servidor.");
 
     const binary = Uint8Array.from(atob(data.audioBase64), (c) => c.charCodeAt(0));
     const form = new FormData();
