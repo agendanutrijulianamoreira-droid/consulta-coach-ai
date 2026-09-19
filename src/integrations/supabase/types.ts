@@ -146,51 +146,51 @@ export type Database = {
       consultations: {
         Row: {
           clinical_summary: string | null
-          observations: string | null
-          record_kind: string
-          visible_in_history: boolean
           consultation_date: string
           created_at: string
           current_step: string
           duration_seconds: number
           ended_at: string | null
           id: string
+          observations: string | null
           patient_id: string
+          record_kind: string
           started_at: string | null
           status: string
           updated_at: string
+          visible_in_history: boolean
         }
         Insert: {
           clinical_summary?: string | null
-          observations?: string | null
-          record_kind?: string
-          visible_in_history?: boolean
           consultation_date?: string
           created_at?: string
           current_step?: string
           duration_seconds?: number
           ended_at?: string | null
           id?: string
+          observations?: string | null
           patient_id: string
+          record_kind?: string
           started_at?: string | null
           status?: string
           updated_at?: string
+          visible_in_history?: boolean
         }
         Update: {
           clinical_summary?: string | null
-          observations?: string | null
-          record_kind?: string
-          visible_in_history?: boolean
           consultation_date?: string
           created_at?: string
           current_step?: string
           duration_seconds?: number
           ended_at?: string | null
           id?: string
+          observations?: string | null
           patient_id?: string
+          record_kind?: string
           started_at?: string | null
           status?: string
           updated_at?: string
+          visible_in_history?: boolean
         }
         Relationships: [
           {
