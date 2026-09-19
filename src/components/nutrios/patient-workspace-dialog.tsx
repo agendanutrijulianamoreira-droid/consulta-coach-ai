@@ -1,14 +1,17 @@
 import { useMemo, useState, useEffect } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Activity, ArrowLeft, FileText, Pencil, Plus, X } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, CalendarDays, Contact, FileText, Pencil, Plus, Settings, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { PatientDialog } from "@/components/nutrios/patient-dialog";
+import { ConsultationRegistrationDialog } from "@/components/nutrios/consultation-registration-dialog";
 import { ClinicalModuleSection, type ClinicalSection } from "@/components/nutrios/clinical-module-section";
 import { ConsultationWorkspace } from "@/components/nutrios/consultation-workspace";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import * as db from "@/lib/nutrios/repository";
+import * as labDb from "@/modules/exames/infrastructure/labs-repository";
 
 export type WorkspaceSection =
   | "perfil"
@@ -32,8 +35,8 @@ type Props = {
 };
 
 const SECTIONS: { id: WorkspaceSection; label: string }[] = [
-  { id: "perfil", label: "Perfil" },
-  { id: "consulta", label: "Consulta" },
+  { id: "perfil", label: "Configurações" },
+  { id: "historico", label: "Histórico de consultas" },
   { id: "anamnese", label: "Anamnese" },
   { id: "antropometria", label: "Antropometria" },
   { id: "calculos", label: "Cálculos" },
@@ -42,7 +45,6 @@ const SECTIONS: { id: WorkspaceSection; label: string }[] = [
   { id: "diagnostico", label: "Diagnóstico" },
   { id: "plano", label: "Plano alimentar" },
   { id: "parecer", label: "Parecer" },
-  { id: "historico", label: "Histórico" },
 ];
 
 const CLINICAL_SECTIONS = new Set<WorkspaceSection>([
@@ -56,6 +58,11 @@ const CLINICAL_SECTIONS = new Set<WorkspaceSection>([
   "parecer",
 ]);
 
+const WORKSPACE_STEPS: Partial<Record<WorkspaceSection, number>> = {
+  consulta: 0, anamnese: 1, antropometria: 2, calculos: 3, recordatorio: 4,
+  exames: 5, diagnostico: 6, plano: 7, parecer: 7,
+};
+
 export function PatientWorkspaceDialog({
   open,
   patientId,
@@ -66,6 +73,9 @@ export function PatientWorkspaceDialog({
   const [section, setSection] = useState<WorkspaceSection>(initialSection);
   const [consultationId, setConsultationId] = useState<string | null>(initialConsultationId ?? null);
   const [editing, setEditing] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const [consultationRecording, setConsultationRecording] = useState(false);
+  const queryClient = useQueryClient();
 
   const patient = useQuery({
     queryKey: ["patient", patientId],
@@ -78,7 +88,23 @@ export function PatientWorkspaceDialog({
     enabled: open && !!patientId,
   });
 
-  const rows = useMemo(() => dossier.data?.consultations ?? [], [dossier.data?.consultations]);
+  const allRows = useMemo(() => dossier.data?.consultations ?? [], [dossier.data?.consultations]);
+  const rows = useMemo(() => allRows.filter((consultation) => consultation.record_kind === "attendance" && consultation.visible_in_history), [allRows]);
+
+  const registerConsultation = useMutation({
+    mutationFn: ({ date, observations }: { date: string; observations: string }) => db.createConsultation(patientId!, date, observations),
+    onSuccess: async (consultation) => {
+      setRegistering(false);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["patient-dossier", patientId] }),
+        queryClient.invalidateQueries({ queryKey: ["consultations"] }),
+        queryClient.invalidateQueries({ queryKey: ["consultation-dates"] }),
+      ]);
+      setConsultationId(consultation.id);
+      setSection("consulta");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -88,7 +114,6 @@ export function PatientWorkspaceDialog({
 
   const selectSection = (next: WorkspaceSection) => {
     setSection(next);
-    setConsultationId(null);
   };
 
   const p = patient.data;
@@ -137,43 +162,54 @@ export function PatientWorkspaceDialog({
           </aside>
 
           <main className="min-h-0 overflow-y-auto bg-background">
+            {consultationId && patientId ? (
+              <div className={CLINICAL_SECTIONS.has(section) || section === "exames" ? "" : "hidden"}>
+                <div className="border-b border-border px-6 py-3">
+                  <Button type="button" variant="ghost" size="sm" disabled={consultationRecording} onClick={() => setConsultationId(null)}><ArrowLeft /> {consultationRecording ? "Encerre a gravação para voltar aos registros" : "Voltar aos registros desta aba"}</Button>
+                </div>
+                <ConsultationWorkspace key={`${patientId}-${consultationId}`} consultationId={consultationId} activeStep={WORKSPACE_STEPS[section] ?? 0} embedded onRecordingChange={setConsultationRecording} />
+              </div>
+            ) : null}
+
             {section === "perfil" ? (
               <Profile
                 patient={p ?? null}
-                rows={rows}
-                dossier={dossier.data}
+                rows={allRows}
                 onEdit={() => setEditing(true)}
                 onOpenSection={selectSection}
               />
             ) : section === "historico" ? (
               <History
                 rows={rows}
-                dossier={dossier.data}
-                onOpen={(id) => {
-                  setConsultationId(id);
-                  setSection("consulta");
-                }}
-                onNew={() => selectSection("consulta")}
+                patientId={patientId!}
+                onNew={() => setRegistering(true)}
               />
-            ) : section === "exames" && patientId ? (
+            ) : section === "exames" && patientId && !consultationId ? (
               <ExamsSection
                 patientId={patientId}
                 rows={rows}
                 consultationId={consultationId}
                 onOpen={setConsultationId}
               />
-            ) : CLINICAL_SECTIONS.has(section) && patientId ? (
+            ) : CLINICAL_SECTIONS.has(section) && patientId && !consultationId ? (
               <ClinicalModuleSection
-                key={`${patientId}-${section}-${consultationId ?? "list"}`}
+                key={patientId}
                 patientId={patientId}
                 section={section as ClinicalSection}
-                initialConsultationId={consultationId}
+                onOpenConsultation={setConsultationId}
               />
             ) : null}
           </main>
         </div>
 
         <PatientDialog open={editing} onOpenChange={setEditing} patient={p ?? null} />
+        <ConsultationRegistrationDialog
+          open={registering}
+          patientName={p?.name}
+          isPending={registerConsultation.isPending}
+          onOpenChange={setRegistering}
+          onConfirm={(date, observations) => registerConsultation.mutate({ date, observations })}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -190,9 +226,23 @@ function ExamsSection({
   consultationId: string | null;
   onOpen: (id: string | null) => void;
 }) {
+  const queryClient = useQueryClient();
+  const [removing, setRemoving] = useState<db.Consultation | null>(null);
   const create = useMutation({
-    mutationFn: () => db.createConsultation(patientId, new Date().toISOString().slice(0, 10)),
+    mutationFn: () => db.createConsultation(patientId, new Date().toISOString().slice(0, 10), undefined, "module"),
     onSuccess: (consultation) => onOpen(consultation.id),
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const remove = useMutation({
+    mutationFn: (consultationId: string) => labDb.deleteLabAssessment(consultationId),
+    onSuccess: async (_, consultationId) => {
+      setRemoving(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["lab-results", consultationId] }),
+        queryClient.invalidateQueries({ queryKey: ["lab-assessment", consultationId] }),
+      ]);
+      toast.success("Exames excluídos somente desta aba.");
+    },
     onError: (error: Error) => toast.error(error.message),
   });
 
@@ -233,9 +283,7 @@ function ExamsSection({
             <div key={consultation.id} className="grid gap-3 py-4 sm:grid-cols-[170px_1fr_auto] sm:items-center">
               <span className="text-sm font-medium">{formatDate(consultation.consultation_date ?? consultation.created_at)}</span>
               <span className="text-xs text-muted-foreground">Exames vinculados a esta consulta</span>
-              <Button type="button" size="sm" variant="ghost" onClick={() => onOpen(consultation.id)}>
-                <FileText /> Abrir exames
-              </Button>
+              <div className="flex items-center justify-end gap-1"><Button type="button" size="sm" variant="ghost" onClick={() => onOpen(consultation.id)}><FileText /> Abrir exames</Button><Button type="button" size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setRemoving(consultation)}><Trash2 /> Excluir</Button></div>
             </div>
           ))}
         </div>
@@ -247,6 +295,9 @@ function ExamsSection({
           <Button className="mt-5" disabled={create.isPending} onClick={() => create.mutate()}><Plus /> Novo exame</Button>
         </div>
       )}
+      <AlertDialog open={!!removing} onOpenChange={(open) => !open && setRemoving(null)}>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Excluir exames?</AlertDialogTitle><AlertDialogDescription>Somente os exames laboratoriais deste registro serão excluídos. Os demais dados da consulta permanecerão intactos.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction disabled={remove.isPending} onClick={(event) => { event.preventDefault(); if (removing) remove.mutate(removing.id); }}>{remove.isPending ? "Excluindo…" : "Excluir exames"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -254,74 +305,53 @@ function ExamsSection({
 function Profile({
   patient,
   rows,
-  dossier,
   onEdit,
   onOpenSection,
 }: {
   patient: db.Patient | null;
   rows: db.Consultation[];
-  dossier: Awaited<ReturnType<typeof db.getPatientDossier>> | undefined;
   onEdit: () => void;
   onOpenSection: (section: WorkspaceSection) => void;
 }) {
   const last = rows[0];
-  const lastAnthro = last ? dossier?.anthro[last.id] : undefined;
-  const lastPlan = last ? dossier?.plans[last.id] : undefined;
-  const lastReport = last ? dossier?.reports[last.id] : undefined;
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-7 lg:px-10 lg:py-9">
       <div className="flex items-start justify-between gap-4 border-b border-border pb-5">
         <div>
-          <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Perfil</p>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight">Visão geral do paciente</h2>
+          <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground"><Settings className="size-3.5" /> Configurações</p>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight">Configurações do paciente</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Centralize cadastro, contato, contexto clínico e preferências usadas em toda a plataforma.</p>
         </div>
-        <Button variant="secondary" size="sm" disabled={!patient} onClick={onEdit}><Pencil /> Editar cadastro</Button>
+        <Button size="sm" disabled={!patient} onClick={onEdit}><Pencil /> Editar configurações</Button>
       </div>
 
-      <section className="mt-6">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-semibold">Fluxo da consulta</h3>
-            <p className="mt-1 text-xs text-muted-foreground">Acesse diretamente as áreas mais usadas do atendimento.</p>
-          </div>
-          <Activity className="size-4 text-muted-foreground" />
-        </div>
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-          <FlowButton label="Consulta" onClick={() => onOpenSection("consulta")} />
-          <FlowButton label="Anamnese" onClick={() => onOpenSection("anamnese")} />
-          <FlowButton label="Antropometria" onClick={() => onOpenSection("antropometria")} />
-          <FlowButton label="Exames" onClick={() => onOpenSection("exames")} />
-          <FlowButton label="Plano alimentar" onClick={() => onOpenSection("plano")} />
-        </div>
-      </section>
-
-      <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_0.85fr]">
-        <section>
-          <h3 className="text-sm font-semibold">Dados cadastrais</h3>
+      <div className="mt-6 grid gap-5 lg:grid-cols-2">
+        <section className="rounded-lg border border-border p-5">
+          <h3 className="flex items-center gap-2 text-sm font-semibold"><Contact className="size-4 text-muted-foreground" /> Identificação e contato</h3>
           <dl className="mt-3 divide-y divide-border border-y border-border text-sm">
             <Row label="CPF" value={patient?.cpf} />
             <Row label="Nascimento" value={patient?.birth_date ? formatDate(patient.birth_date) : null} />
             <Row label="Sexo" value={patient?.sex ? (patient.sex === "feminino" ? "Feminino" : "Masculino") : null} />
             <Row label="Telefone" value={patient?.phone} />
             <Row label="E-mail" value={patient?.email} />
-            <Row label="Última consulta" value={last ? formatDate(last.consultation_date ?? last.created_at) : null} />
           </dl>
         </section>
 
-        <section>
-          <h3 className="text-sm font-semibold">Último acompanhamento</h3>
+        <section className="rounded-lg border border-border p-5">
+          <h3 className="flex items-center gap-2 text-sm font-semibold"><CalendarDays className="size-4 text-muted-foreground" /> Uso na plataforma</h3>
           <dl className="mt-3 divide-y divide-border border-y border-border text-sm">
-            <Row label="Status" value={last ? (last.status === "finalizada" ? "Finalizada" : "Em aberto") : null} />
-            <Row label="Peso" value={lastAnthro?.["peso"] ? `${lastAnthro["peso"]} kg` : null} />
-            <Row label="Plano" value={lastPlan?.kcal ? `${Math.round(lastPlan.kcal)} kcal` : null} />
-            <Row label="Parecer" value={lastReport ? "Disponível" : null} />
+            <Row label="Consultas registradas" value={String(rows.length)} />
+            <Row label="Última consulta" value={last ? formatDate(last.consultation_date ?? last.created_at) : null} />
+            <Row label="Gestação" value={patient?.is_pregnant ? `${patient.pregnancy_weeks ?? "—"} semanas` : "Não informada"} />
+            <Row label="Cadastro criado" value={patient?.created_at ? formatDate(patient.created_at) : null} />
           </dl>
+          <Button type="button" variant="outline" size="sm" className="mt-4" onClick={() => onOpenSection("historico")}>Abrir histórico de consultas</Button>
         </section>
       </div>
 
-      <section className="mt-8 border-t border-border pt-6">
-        <h3 className="text-sm font-semibold">Observações</h3>
+      <section className="mt-5 rounded-lg border border-border p-5">
+        <h3 className="text-sm font-semibold">Contexto clínico e organização</h3>
         <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">{patient?.notes || "Sem observações registradas."}</p>
         {patient?.tags?.length ? (
           <div className="mt-5 flex flex-wrap gap-1.5">{patient.tags.map((tag) => <Badge key={tag} variant="outline">{tag}</Badge>)}</div>
@@ -331,50 +361,53 @@ function Profile({
   );
 }
 
-function FlowButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return <Button type="button" variant="outline" className="h-auto justify-start px-4 py-3 text-sm" onClick={onClick}>{label}</Button>;
-}
-
 function History({
   rows,
-  dossier,
-  onOpen,
+  patientId,
   onNew,
 }: {
   rows: db.Consultation[];
-  dossier: Awaited<ReturnType<typeof db.getPatientDossier>> | undefined;
-  onOpen: (id: string) => void;
+  patientId: string;
   onNew: () => void;
 }) {
+  const queryClient = useQueryClient();
+  const [removing, setRemoving] = useState<db.Consultation | null>(null);
+  const remove = useMutation({
+    mutationFn: (id: string) => db.hideConsultationFromHistory(id),
+    onSuccess: async () => {
+      setRemoving(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["patient-dossier", patientId] }),
+        queryClient.invalidateQueries({ queryKey: ["consultations"] }),
+        queryClient.invalidateQueries({ queryKey: ["consultation-dates"] }),
+        queryClient.invalidateQueries({ queryKey: ["consultation-report"] }),
+      ]);
+      toast.success("Consulta removida do histórico e do relatório. O prontuário foi preservado.");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
   return (
     <div className="mx-auto max-w-5xl px-6 py-7 lg:px-10 lg:py-9">
       <div className="flex items-end justify-between gap-4 border-b border-border pb-5">
         <div>
-          <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Histórico</p>
-          <h2 className="mt-1 text-xl font-semibold tracking-tight">Linha do tempo clínica</h2>
-          <p className="mt-1 text-sm text-muted-foreground">O histórico é formado automaticamente por todos os registros e consultas do paciente.</p>
+          <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Atendimentos</p>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight">Histórico de consultas</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Cada registro nasce do botão Registrar consulta no início do atendimento.</p>
         </div>
-        <Button size="sm" onClick={onNew}>Nova consulta</Button>
+        <Button size="sm" onClick={onNew}><Plus /> Registrar consulta</Button>
       </div>
       <div className="mt-6 divide-y divide-border border-y border-border">
-        {rows.length ? rows.map((consultation) => {
-          const anthro = dossier?.anthro[consultation.id] ?? {};
-          const plan = dossier?.plans[consultation.id];
-          const report = dossier?.reports[consultation.id];
-          return (
-            <button key={consultation.id} type="button" onClick={() => onOpen(consultation.id)} className="grid w-full gap-2 px-1 py-4 text-left hover:bg-muted/30 sm:grid-cols-[170px_1fr_auto] sm:items-center">
-              <span className="text-sm font-medium">{formatDate(consultation.consultation_date ?? consultation.created_at)}</span>
-              <span className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                <span>{consultation.status === "finalizada" ? "Finalizada" : "Em aberto"}</span>
-                {anthro["peso"] ? <span>{anthro["peso"]} kg</span> : null}
-                {plan?.kcal ? <span>{Math.round(plan.kcal)} kcal</span> : null}
-                {report ? <span>Parecer disponível</span> : null}
-              </span>
-              <span className="text-xs font-medium text-foreground">Abrir consulta</span>
-            </button>
-          );
-        }) : <p className="py-10 text-sm text-muted-foreground">Nenhum registro clínico ainda.</p>}
+        {rows.length ? rows.map((consultation) => (
+          <div key={consultation.id} className="grid gap-3 px-1 py-4 sm:grid-cols-[170px_1fr_auto] sm:items-center">
+            <span className="text-sm font-medium">{formatDate(consultation.consultation_date ?? consultation.created_at)}</span>
+            <p className="whitespace-pre-wrap text-sm text-muted-foreground">{consultation.observations || "Sem observações."}</p>
+            <Button type="button" size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setRemoving(consultation)}><Trash2 /> Excluir</Button>
+          </div>
+        )) : <p className="py-10 text-sm text-muted-foreground">Nenhuma consulta registrada.</p>}
       </div>
+      <AlertDialog open={!!removing} onOpenChange={(open) => !open && setRemoving(null)}>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remover do histórico?</AlertDialogTitle><AlertDialogDescription>A consulta de {removing ? formatDate(removing.consultation_date ?? removing.created_at) : ""} deixará de aparecer neste histórico e no relatório de Meu Consultório. Anamnese, exames, avaliações, plano e demais dados clínicos permanecerão no prontuário e poderão ser excluídos somente em suas próprias abas.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction disabled={remove.isPending} onClick={(event) => { event.preventDefault(); if (removing) remove.mutate(removing.id); }}>{remove.isPending ? "Removendo…" : "Remover do histórico"}</AlertDialogAction></AlertDialogFooter></AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

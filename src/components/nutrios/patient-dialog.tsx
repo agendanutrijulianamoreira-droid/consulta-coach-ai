@@ -73,12 +73,14 @@ export function PatientDialog({
   const [tagDraft, setTagDraft] = useState("");
   const [created, setCreated] = useState<Patient | null>(null);
   const [consultDate, setConsultDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [consultObservations, setConsultObservations] = useState("");
 
   useEffect(() => {
     if (!open) return;
     setTagDraft("");
     setCreated(null);
     setConsultDate(new Date().toISOString().slice(0, 10));
+    setConsultObservations("");
     setForm(
       patient
         ? {
@@ -133,7 +135,7 @@ export function PatientDialog({
   });
 
   const startConsultation = useMutation({
-    mutationFn: async () => createConsultation(created!.id, consultDate),
+    mutationFn: async () => createConsultation(created!.id, consultDate, consultObservations),
     onSuccess: (consultation) => {
       void queryClient.invalidateQueries({ queryKey: ["consultations"] });
       void queryClient.invalidateQueries({ queryKey: ["consultation-dates"] });
@@ -158,6 +160,16 @@ export function PatientDialog({
           <div className="grid gap-1.5">
             <Label htmlFor="new-consult-date" className="text-xs text-muted-foreground">Data da consulta</Label>
             <Input id="new-consult-date" type="date" value={consultDate} onChange={(e) => setConsultDate(e.target.value)} />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="new-consult-observations" className="text-xs text-muted-foreground">Observações da consulta</Label>
+            <Textarea
+              id="new-consult-observations"
+              rows={3}
+              value={consultObservations}
+              onChange={(event) => setConsultObservations(event.target.value)}
+              placeholder="Motivo do atendimento, retorno ou contexto importante…"
+            />
           </div>
           <DialogFooter className="gap-2">
             <Button

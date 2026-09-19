@@ -33,6 +33,9 @@ export interface Consultation {
   ended_at: string | null;
   duration_seconds: number;
   clinical_summary: string | null;
+  observations: string | null;
+  record_kind: "attendance" | "module";
+  visible_in_history: boolean;
   created_at: string;
 }
 
@@ -98,12 +101,44 @@ export async function listConsultations() {
   ) as (Consultation & { patients: { name: string } | null })[];
 }
 
-export async function createConsultation(patientId: string, consultationDate?: string) {
-  const payload: { patient_id: string; consultation_date?: string } = { patient_id: patientId };
+export async function createConsultation(
+  patientId: string,
+  consultationDate?: string,
+  observations?: string,
+  recordKind: Consultation["record_kind"] = "attendance",
+) {
+  const payload: { patient_id: string; consultation_date?: string; observations?: string | null; record_kind: Consultation["record_kind"] } = {
+    patient_id: patientId,
+    record_kind: recordKind,
+  };
   if (consultationDate) payload.consultation_date = consultationDate;
+  if (observations !== undefined) payload.observations = observations.trim() || null;
   return unwrap(
     await supabase.from("consultations").insert(payload).select().single(),
   ) as Consultation;
+}
+
+/** Oculta somente o registro administrativo; o prontuário clínico permanece intacto. */
+export async function hideConsultationFromHistory(id: string) {
+  const { error } = await supabase.from("consultations").update({ visible_in_history: false }).eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export type ConsultationReportRow = Pick<
+  Consultation,
+  "id" | "patient_id" | "status" | "consultation_date" | "observations" | "created_at"
+> & { patients: { name: string } | null };
+
+/** Fonte única do relatório operacional exibido em Meu Consultório. */
+export async function listConsultationReport() {
+  return unwrap(
+    await supabase
+      .from("consultations")
+      .select("id, patient_id, status, consultation_date, observations, created_at, patients(name)")
+      .eq("record_kind", "attendance")
+      .eq("visible_in_history", true)
+      .order("consultation_date", { ascending: false }),
+  ) as unknown as ConsultationReportRow[];
 }
 
 export async function getPatient(id: string) {

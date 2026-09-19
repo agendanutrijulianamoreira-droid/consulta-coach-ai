@@ -71,7 +71,7 @@ function Home() {
   }, [patients.data, search, tagFilter, sexFilter, createdPeriod, modifiedPeriod, createdStart, createdEnd, modifiedStart, modifiedEnd, sortMode]);
 
   const removePatient = useMutation({ mutationFn: (id: string) => deletePatient(id), onSuccess: () => { setRemoving(null); void queryClient.invalidateQueries({ queryKey: ["patients"] }); toast.success("Paciente excluído."); }, onError: (error: Error) => toast.error(error.message) });
-  const startConsultation = useMutation({ mutationFn: ({ patientId, consultationDate }: { patientId: string; consultationDate: string }) => createConsultation(patientId, consultationDate), onSuccess: (consultation) => { setConsultationPatient(null); void queryClient.invalidateQueries({ queryKey: ["consultation-dates"] }); void queryClient.invalidateQueries({ queryKey: ["consultations"] }); setWorkspace({ patientId: consultation.patient_id, consultationId: consultation.id, section: "consulta" }); }, onError: (error: Error) => toast.error(error.message) });
+  const startConsultation = useMutation({ mutationFn: ({ patientId, consultationDate, observations }: { patientId: string; consultationDate: string; observations: string }) => createConsultation(patientId, consultationDate, observations), onSuccess: (consultation) => { setConsultationPatient(null); void queryClient.invalidateQueries({ queryKey: ["consultation-dates"] }); void queryClient.invalidateQueries({ queryKey: ["consultations"] }); setWorkspace({ patientId: consultation.patient_id, consultationId: consultation.id, section: "consulta" }); }, onError: (error: Error) => toast.error(error.message) });
 
   const exportPatients = () => {
     const header = ["Nome", "CPF", "Telefone", "E-mail", "Sexo", "Nascimento", "Tags", "Criado em", "Modificado em"];
@@ -115,8 +115,8 @@ function Home() {
             patientName={consultationPatient?.name}
             isPending={startConsultation.isPending}
             onOpenChange={(open) => { if (!open) setConsultationPatient(null); }}
-            onConfirm={(consultationDate) => {
-              if (consultationPatient) startConsultation.mutate({ patientId: consultationPatient.id, consultationDate });
+            onConfirm={(consultationDate, observations) => {
+              if (consultationPatient) startConsultation.mutate({ patientId: consultationPatient.id, consultationDate, observations });
             }}
             onDecline={() => {
               if (consultationPatient) setWorkspace({ patientId: consultationPatient.id, section: "perfil" });

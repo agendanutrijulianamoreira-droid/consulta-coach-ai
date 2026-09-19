@@ -3,9 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowDown,
   ArrowUp,
+  BarChart3,
   BookOpen,
   Building2,
   CheckCircle2,
+  CalendarDays,
   ChevronRight,
   CirclePlus,
   Layers3,
@@ -14,6 +16,7 @@ import {
   Save,
   Sparkles,
   Trash2,
+  Users,
   WalletCards,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -22,7 +25,7 @@ import { AppShell } from "@/components/nutrios/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { listRecipes } from "@/lib/nutrios/repository";
+import { listConsultationReport, listRecipes } from "@/lib/nutrios/repository";
 import {
   listMethods,
   newMethod,
@@ -40,7 +43,7 @@ export const Route = createFileRoute("/consultorio")({
   component: ClinicOfficePage,
 });
 
-type OfficeTab = "metodo" | "produtos" | "financeiro";
+type OfficeTab = "metodo" | "relatorios" | "produtos" | "financeiro";
 
 const officeSections: Array<{
   id: OfficeTab;
@@ -54,6 +57,13 @@ const officeSections: Array<{
     title: "Método",
     description: "Fases, metas, receitas e materiais clínicos.",
     icon: Layers3,
+    available: true,
+  },
+  {
+    id: "relatorios",
+    title: "Relatório de consultas",
+    description: "Volume, pacientes atendidos e observações.",
+    icon: BarChart3,
     available: true,
   },
   {
@@ -133,7 +143,7 @@ function ClinicOfficePage() {
             </aside>
 
             <main className="min-w-0">
-              {tab === "metodo" ? <MethodWorkspace /> : <ComingSoon tab={tab} />}
+              {tab === "metodo" ? <MethodWorkspace /> : tab === "relatorios" ? <ConsultationReport /> : <ComingSoon tab={tab} />}
             </main>
           </div>
         </div>
@@ -530,7 +540,43 @@ function EmptyMethod({ onCreate }: { onCreate: () => void }) {
   );
 }
 
-function ComingSoon({ tab }: { tab: Exclude<OfficeTab, "metodo"> }) {
+function ConsultationReport() {
+  const report = useQuery({ queryKey: ["consultation-report"], queryFn: listConsultationReport });
+  const rows = report.data ?? [];
+  const now = new Date();
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const currentMonth = rows.filter((row) => row.consultation_date.slice(0, 7) === monthKey).length;
+  const uniquePatients = new Set(rows.map((row) => row.patient_id)).size;
+
+  return (
+    <div className="space-y-5">
+      <section className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+        <div className="border-b border-border px-5 py-5 sm:px-6">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground"><BarChart3 className="size-3.5" /> Relatório operacional</div>
+          <h2 className="mt-1.5 text-xl font-semibold tracking-tight">Consultas registradas</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Dados alimentados automaticamente pelo botão Registrar consulta no início de cada atendimento.</p>
+        </div>
+        <div className="grid divide-y divide-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <ReportMetric icon={<CalendarDays />} label="Total de consultas" value={rows.length} />
+          <ReportMetric icon={<BarChart3 />} label="Consultas neste mês" value={currentMonth} />
+          <ReportMetric icon={<Users />} label="Pacientes atendidos" value={uniquePatients} />
+        </div>
+      </section>
+      <section className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+        <div className="border-b border-border px-5 py-4 sm:px-6"><h3 className="text-sm font-semibold">Histórico consolidado</h3><p className="mt-1 text-xs text-muted-foreground">Consulta, paciente, observações registradas e situação do atendimento.</p></div>
+        {report.isLoading ? <p className="px-6 py-10 text-sm text-muted-foreground">Carregando relatório…</p> : null}
+        {report.isError ? <p className="px-6 py-10 text-sm text-destructive">Não foi possível carregar o relatório de consultas.</p> : null}
+        {!report.isLoading && !report.isError && !rows.length ? <p className="px-6 py-10 text-sm text-muted-foreground">Nenhuma consulta registrada.</p> : null}
+        {rows.length ? <div className="divide-y divide-border">{rows.map((row) => <div key={row.id} className="grid gap-2 px-5 py-4 sm:px-6 lg:grid-cols-[140px_220px_minmax(0,1fr)_100px] lg:items-center"><span className="text-sm font-medium">{formatReportDate(row.consultation_date)}</span><span className="truncate text-sm">{row.patients?.name ?? "Paciente"}</span><span className="whitespace-pre-wrap text-sm text-muted-foreground">{row.observations || "Sem observações."}</span><span className="text-xs font-medium text-muted-foreground">{row.status === "finalizada" ? "Finalizada" : "Em aberto"}</span></div>)}</div> : null}
+      </section>
+    </div>
+  );
+}
+
+function ReportMetric({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) { return <div className="px-5 py-4 sm:px-6"><div className="flex items-center gap-2 text-xs text-muted-foreground">{icon}{label}</div><div className="mt-1.5 text-2xl font-semibold tabular-nums">{value}</div></div>; }
+function formatReportDate(value: string) { return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(`${value.slice(0, 10)}T12:00:00`)); }
+
+function ComingSoon({ tab }: { tab: Exclude<OfficeTab, "metodo" | "relatorios"> }) {
   const product = tab === "produtos";
   return (
     <div className="rounded-xl border border-border bg-background p-8 shadow-sm sm:p-10">

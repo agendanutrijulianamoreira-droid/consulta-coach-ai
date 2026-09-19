@@ -118,6 +118,14 @@ export async function deleteLabResult(id: string) {
   if (error) throw new Error(error.message);
 }
 
+/** Exclui os dados laboratoriais desta aba sem remover a consulta ou outros módulos. */
+export async function deleteLabAssessment(consultationId: string) {
+  const results = await labSupabase.from("lab_results").delete().eq("consultation_id", consultationId);
+  if (results.error) throw new Error(results.error.message);
+  const assessment = await labSupabase.from("lab_assessments").delete().eq("consultation_id", consultationId);
+  if (assessment.error) throw new Error(assessment.error.message);
+}
+
 export async function replaceDerivedResults(consultationId: string, results: LabResultValue[]) {
   const { error: deleteError } = await labSupabase.from("lab_results").delete().eq("consultation_id", consultationId).eq("is_derived", true);
   if (deleteError) throw new Error(deleteError.message);
