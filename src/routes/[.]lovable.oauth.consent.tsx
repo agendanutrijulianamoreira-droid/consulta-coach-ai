@@ -26,6 +26,22 @@ const oauthApi = () => (supabase.auth as unknown as { oauth: OAuthApi }).oauth;
 export const Route = createFileRoute("/.lovable/oauth/consent")({
   // Somente no navegador: a sessão do Supabase vive no localStorage.
   ssr: false,
+  head: () => ({
+    meta: [
+      { title: "Autorizar integração — NutriOS" },
+      {
+        name: "description",
+        content: "Autorize com segurança aplicativos externos a acessar as ferramentas do NutriOS.",
+      },
+      { property: "og:title", content: "Autorizar integração — NutriOS" },
+      {
+        property: "og:description",
+        content: "Autorize com segurança aplicativos externos a acessar as ferramentas do NutriOS.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   validateSearch: (s: Record<string, unknown>) => ({
     authorization_id: typeof s["authorization_id"] === "string" ? s["authorization_id"] : "",
   }),
