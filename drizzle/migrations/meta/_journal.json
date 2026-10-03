@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791049194674,
+      "tag": "0000_secure_clinical_data_and_complete_schema",
+      "breakpoints": true
+    }
+  ]
+}
