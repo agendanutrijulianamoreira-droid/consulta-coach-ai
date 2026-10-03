@@ -208,6 +208,7 @@ export type Database = {
           created_at: string
           hypotheses: Json
           id: string
+          reasoning: Json
           recall_flags: Json
           updated_at: string
         }
@@ -216,6 +217,7 @@ export type Database = {
           created_at?: string
           hypotheses?: Json
           id?: string
+          reasoning?: Json
           recall_flags?: Json
           updated_at?: string
         }
@@ -224,6 +226,7 @@ export type Database = {
           created_at?: string
           hypotheses?: Json
           id?: string
+          reasoning?: Json
           recall_flags?: Json
           updated_at?: string
         }
@@ -575,6 +578,7 @@ export type Database = {
           notes: string | null
           phone: string | null
           pregnancy_weeks: number | null
+          professional_id: string | null
           sex: string | null
           tags: string[]
           updated_at: string
@@ -590,6 +594,7 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           pregnancy_weeks?: number | null
+          professional_id?: string | null
           sex?: string | null
           tags?: string[]
           updated_at?: string
@@ -605,6 +610,7 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           pregnancy_weeks?: number | null
+          professional_id?: string | null
           sex?: string | null
           tags?: string[]
           updated_at?: string
