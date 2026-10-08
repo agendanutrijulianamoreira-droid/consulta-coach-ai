@@ -18,4 +18,13 @@ describe("patient CSV import", () => {
     ]);
     expect(result.invalid[0]?.errors).toContain("Paciente duplicado.");
   });
+
+  test("checks email and phone independently", () => {
+    const result = parsePatientCsv(
+      "Nome,E-mail,Telefone\nAna,new@example.com,(11) 99999-0000\nBruna,other@example.com,(11) 99999-0000",
+      [{ name: "Já existe", email: "old@example.com", phone: "11999990000" }],
+    );
+    expect(result.duplicates.length).toBe(2);
+    expect(result.valid.length).toBe(0);
+  });
 });
