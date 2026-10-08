@@ -28,13 +28,14 @@ export function parsePatientCsv(csv: string, existing: PatientInput[] = []): Pat
     const name = value("nome") || value("name");
     const email = value("email") || null;
     const phone = value("telefone") || value("phone") || null;
-    const duplicateKey = key(email) || key(phone) || undefined;
+    const duplicateKeys = [key(email), key(phone)].filter(Boolean);
+    const duplicateKey = duplicateKeys[0] || undefined;
     const errors: string[] = [];
     if (!name) errors.push("Nome é obrigatório.");
     if (email && !/^\S+@\S+\.\S+$/.test(email)) errors.push("E-mail inválido.");
-    if (duplicateKey && (seen.has(duplicateKey) || existingKeys.has(duplicateKey)))
+    if (duplicateKeys.some((candidate) => seen.has(candidate) || existingKeys.has(candidate)))
       errors.push("Paciente duplicado.");
-    if (duplicateKey) seen.add(duplicateKey);
+    duplicateKeys.forEach((candidate) => seen.add(candidate));
     rows.push({
       row: index + 2,
       name,
