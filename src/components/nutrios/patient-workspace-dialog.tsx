@@ -9,6 +9,7 @@ import { PatientDialog } from "@/components/nutrios/patient-dialog";
 import { ConsultationRegistrationDialog } from "@/components/nutrios/consultation-registration-dialog";
 import { ClinicalModuleSection, type ClinicalSection } from "@/components/nutrios/clinical-module-section";
 import { ConsultationWorkspace } from "@/components/nutrios/consultation-workspace";
+import { MetabolicMapSection } from "@/modules/metabolico/ui/metabolic-map-section";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import * as db from "@/lib/nutrios/repository";
 import * as labDb from "@/modules/exames/infrastructure/labs-repository";
@@ -24,6 +25,7 @@ export type WorkspaceSection =
   | "diagnostico"
   | "plano"
   | "parecer"
+  | "metabolico"
   | "historico";
 
 type Props = {
@@ -42,6 +44,7 @@ const SECTIONS: { id: WorkspaceSection; label: string }[] = [
   { id: "calculos", label: "Cálculos" },
   { id: "recordatorio", label: "Recordatório" },
   { id: "exames", label: "Exames" },
+  { id: "metabolico", label: "Mapa Metabólico" },
   { id: "diagnostico", label: "Diagnóstico" },
   { id: "plano", label: "Plano alimentar" },
   { id: "parecer", label: "Parecer" },
@@ -198,6 +201,8 @@ export function PatientWorkspaceDialog({
                 section={section as ClinicalSection}
                 onOpenConsultation={setConsultationId}
               />
+            ) : section === "metabolico" && patientId ? (
+              <MetabolicMapSection patientId={patientId} rows={rows} />
             ) : null}
           </main>
         </div>
