@@ -137,7 +137,7 @@ with check (exists (select 1 from public.consultations c join public.patients p 
 
 do $$ declare table_name text; begin
   foreach table_name in array array['metabolic_context_entries','metabolic_capacity_measurements','metabolic_energy_measurements','metabolic_genetic_findings'] loop
-    execute format('create policy "%1$s_owner_access" on public.%1$I for all to authenticated using (exists (select 1 from public.%2$I x join public.metabolic_assessments a on a.id = x.assessment_id join public.consultations c on c.id = a.consultation_id join public.patients p on p.id = c.patient_id where x.id = %2$I.id and p.professional_id = auth.uid())) with check (exists (select 1 from public.%2$I x join public.metabolic_assessments a on a.id = x.assessment_id join public.consultations c on c.id = a.consultation_id join public.patients p on p.id = c.patient_id where x.id = %2$I.id and p.professional_id = auth.uid()))', table_name, table_name);
+    execute format('create policy "%1$s_owner_access" on public.%1$I for all to authenticated using (exists (select 1 from public.metabolic_assessments a join public.consultations c on c.id = a.consultation_id join public.patients p on p.id = c.patient_id where a.id = %2$I.assessment_id and p.professional_id = auth.uid())) with check (exists (select 1 from public.metabolic_assessments a join public.consultations c on c.id = a.consultation_id join public.patients p on p.id = c.patient_id where a.id = %2$I.assessment_id and p.professional_id = auth.uid()))', table_name, table_name);
   end loop;
 end $$;
 
