@@ -23,7 +23,7 @@ export const Route = createFileRoute("/parecer/$id")({
       {
         name: "description",
         content:
-          "Parecer nutricional ilustrado, com composição corporal, score e prioridades clínicas, pronto para imprimir e entregar.",
+          "Parecer nutricional ilustrado, com composição corporal, prioridades clínicas e metas, pronto para imprimir e entregar.",
       },
       { property: "og:title", content: "Parecer nutricional do paciente — NutriOS" },
       {

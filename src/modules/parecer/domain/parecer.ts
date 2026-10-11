@@ -68,7 +68,6 @@ export interface ParecerMetrics {
   cmb: number | null;
   cmbClass: string | null;
   amb: number | null;
-  score: number;
   male: boolean;
 }
 
@@ -84,27 +83,6 @@ function cmbClassification(pct: number) {
   if (pct < 90) return "Desnutrição leve";
   if (pct <= 110) return "Eutrofia";
   return "Acima do padrão de referência";
-}
-
-function compositionScore(m: {
-  fatPct: number | null;
-  musclePct: number | null;
-  metabolicAge: number | null;
-  age: number | null;
-  visceral: number | null;
-  whr: number | null;
-  male: boolean;
-}) {
-  const fatCut = m.male ? 20 : 28;
-  const muscleCut = m.male ? 38 : 30;
-  const whrCut = m.male ? 0.9 : 0.8;
-  let penalty = 0;
-  if (m.fatPct !== null && m.fatPct > fatCut) penalty += Math.min(35, (m.fatPct - fatCut) * 1.5);
-  if (m.musclePct !== null && m.musclePct < muscleCut) penalty += Math.min(20, (muscleCut - m.musclePct) * 1.2);
-  if (m.metabolicAge !== null && m.age !== null && m.metabolicAge > m.age) penalty += Math.min(20, (m.metabolicAge - m.age) * 0.6);
-  if (m.visceral !== null && m.visceral >= 7) penalty += Math.min(15, (m.visceral - 6) * 2.2);
-  if (m.whr !== null && m.whr >= whrCut) penalty += Math.min(10, (m.whr - (whrCut - 0.01)) * 30);
-  return Math.max(0, Math.min(100, Math.round(100 - penalty)));
 }
 
 export function buildParecerMetrics(data: AnthroData, patient: ParecerPatient): ParecerMetrics {
@@ -179,7 +157,6 @@ export function buildParecerMetrics(data: AnthroData, patient: ParecerPatient): 
     cmb,
     cmbClass: cmbPct !== null ? `${cmbClassification(cmbPct)} · ${cmbPct}% do padrão` : null,
     amb,
-    score: compositionScore({ fatPct, musclePct, metabolicAge, age, visceral, whr, male }),
     male,
   };
 }
@@ -238,7 +215,6 @@ export function metricsToPrompt(m: ParecerMetrics, patient: ParecerPatient) {
     `IGV: ${m.visceral ?? "—"} (${m.visceralClass ?? "—"}) · idade metabólica: ${m.metabolicAge ?? "—"}`,
     `Peso ósseo: ${n(m.boneWeight, "kg")} (${m.boneWeightSource ?? "não disponível"}) · hidratação: ${n(m.hydration, "L")} · TMB: ${m.bmr ?? "—"} kcal`,
     `CMB: ${n(m.cmb, "cm")} (${m.cmbClass ?? "—"}) · AMB: ${n(m.amb, "cm²")}`,
-    `Score de composição corporal: ${m.score}/100`,
   ].join("\n");
 }
 

@@ -43,7 +43,12 @@ export function ParecerDocument({ doc }: { doc: ParecerDocument }) {
         <p className="mt-2 text-[9px] leading-4" style={{ color: MUTED }}>(*) Valores calculados são identificados no próprio documento. Peso ósseo só é calculado quando existem os diâmetros antropométricos necessários; não é estimado por percentual fixo da massa magra.</p>
       </Section> : null}
 
-      <Section title="Score de composição corporal"><Gauge score={metrics.score} /></Section>
+      <Section title="Leitura integrada da composição corporal">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Insight title="O que acompanhar" text="A evolução deve ser lida pelo conjunto de gordura corporal, massa muscular, hidratação e circunferências — sempre comparando avaliações feitas em condições semelhantes." />
+          <Insight title="Como interpretar" text="Os indicadores apoiam a conversa clínica, mas não substituem a avaliação profissional, o histórico da paciente e a resposta ao plano alimentar." />
+        </div>
+      </Section>
       <Footer page={1} name={patient.name} />
     </Sheet>
 
@@ -103,11 +108,8 @@ function Table({ rows, headers }: { rows: ParecerRow[]; headers: string[] }) {
   return <table className="w-full border-collapse text-[10px]"><thead><tr style={{ background: GREEN, color: "white" }}>{headers.map((h) => <th key={h} className="border px-2 py-1.5 text-left font-semibold" style={{ borderColor: LINE }}>{h}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={`${row.label}-${index}`} style={{ background: row.calculated ? BLUE_SOFT : index % 2 ? "#F8FBF9" : GREEN_SOFT }}><td className="border px-2 py-1.5 font-semibold" style={{ borderColor: LINE, color: GREEN_DARK }}>{row.label}</td><td className="border px-2 py-1.5 text-center font-semibold tabular-nums" style={{ borderColor: LINE }}>{row.value}</td><td className="border px-2 py-1.5" style={{ borderColor: LINE, color: row.tone === "alto" ? ALERT : row.tone === "atencao" ? AMBER : INK }}>{row.reference}</td></tr>)}</tbody></table>;
 }
 
-function Gauge({ score }: { score: number }) {
-  const clamped = Math.max(0, Math.min(100, score));
-  const angle = Math.PI + (clamped / 100) * Math.PI;
-  const x = 100 + 62 * Math.cos(angle); const y = 92 + 62 * Math.sin(angle);
-  return <div className="flex flex-col items-center"><svg viewBox="0 0 200 115" className="w-[260px]" aria-label={`Score de composição corporal ${score} de 100`}><path d="M25 92 A75 75 0 0 1 175 92" fill="none" stroke="#E24F43" strokeWidth="18" /><path d="M63 28 A75 75 0 0 1 137 28" fill="none" stroke="#F2C315" strokeWidth="18" /><path d="M137 28 A75 75 0 0 1 175 92" fill="none" stroke="#27985E" strokeWidth="18" /><line x1="100" y1="92" x2={x} y2={y} stroke="#252525" strokeWidth="3" /><circle cx="100" cy="92" r="6" fill="#252525" /></svg><div className="-mt-1 text-[28px] font-bold" style={{ color: GREEN }}>{score}</div><div className="text-[10px]" style={{ color: MUTED }}>/ 100 pontos</div></div>;
+function Insight({ title, text }: { title: string; text: string }) {
+  return <div className="rounded-md border p-3" style={{ borderColor: LINE, background: GREEN_SOFT }}><div className="text-[10px] font-bold uppercase tracking-wide" style={{ color: GREEN }}>{title}</div><p className="mt-1 text-[10px] leading-4" style={{ color: INK }}>{text}</p></div>;
 }
 
 function Bar({ gauge }: { gauge: ParecerGauge }) {
