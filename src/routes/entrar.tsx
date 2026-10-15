@@ -96,6 +96,20 @@ function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            disabled={busy}
+            onClick={() => void signInWithGoogle()}
+          >
+            <GoogleIcon /> Entrar com Google
+          </Button>
+          <div className="my-4 flex items-center gap-3 text-[11px] text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            ou com e-mail e senha
+            <span className="h-px flex-1 bg-border" />
+          </div>
           <Tabs defaultValue="entrar">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="entrar">Entrar</TabsTrigger>
