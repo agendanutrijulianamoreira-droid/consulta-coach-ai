@@ -2,10 +2,12 @@ import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
+  AttentionCenter,
   ConsultationHistory,
   HomeHeader,
   PatientQuickAccess,
   SummaryCards,
+  type AttentionItem,
   type PatientRow,
   type PatientView,
 } from "@/components/nutrios/consultation-home-sections";
@@ -107,6 +109,54 @@ export function ConsultationHome() {
     ).length;
   }, [patients.data]);
 
+  const attentionItems = useMemo<AttentionItem[]>(() => {
+    const patientById = new Map((patients.data ?? []).map((patient) => [patient.id, patient]));
+    const items: AttentionItem[] = [];
+
+    for (const consultation of consultations.data ?? []) {
+      if (consultation.record_kind !== "attendance" || consultation.status === "finalizada") {
+        continue;
+      }
+
+      const patient = patientById.get(consultation.patient_id);
+      if (!patient) continue;
+
+      const isInProgress = consultation.status === "em_andamento";
+      items.push({
+        id: `consultation-${consultation.id}`,
+        patient,
+        consultationId: consultation.id,
+        title: isInProgress ? "Consulta em andamento" : "Consulta não finalizada",
+        detail: consultation.current_step
+          ? `Etapa: ${formatStep(consultation.current_step)}`
+          : "Revisar prontuário",
+        actionLabel: "Abrir consulta",
+        section: "consulta",
+        tone: isInProgress ? "urgent" : "attention",
+      });
+
+      if (items.length >= 4) break;
+    }
+
+    const currentMonth = new Date().getMonth() + 1;
+    const birthdayPatient = (patients.data ?? []).find(
+      (patient) => getBirthDateParts(patient.birth_date)?.month === currentMonth,
+    );
+    if (birthdayPatient) {
+      items.push({
+        id: `birthday-${birthdayPatient.id}`,
+        patient: birthdayPatient,
+        title: "Aniversariante do mês",
+        detail: "Considerar um contato de relacionamento",
+        actionLabel: "Abrir paciente",
+        section: "perfil",
+        tone: "informative",
+      });
+    }
+
+    return items.slice(0, 5);
+  }, [consultations.data, patients.data]);
+
   const consultationStats = useMemo(
     () => summarizeConsultations(consultationDates.data ?? []),
     [consultationDates.data],
@@ -199,6 +249,18 @@ export function ConsultationHome() {
                 : consultationStats.lastSevenDays
           }
           birthdays={patients.isLoading ? null : patients.isError ? undefined : birthdayCount}
+        />
+
+        <AttentionCenter
+          items={attentionItems}
+          isLoading={patients.isLoading || consultations.isLoading}
+          onOpen={(item) =>
+            setWorkspace({
+              patientId: item.patient.id,
+              consultationId: item.consultationId,
+              section: item.section,
+            })
+          }
         />
 
         <PatientQuickAccess
@@ -311,6 +373,21 @@ function getBirthDateParts(value: string | null) {
   const [, month, day] = value.slice(0, 10).split("-").map(Number);
   if (!month || !day) return null;
   return { month, day };
+}
+
+function formatStep(value: string) {
+  const labels: Record<string, string> = {
+    consulta: "consulta",
+    anamnese: "anamnese",
+    antropometria: "antropometria",
+    calculos: "cálculos",
+    recordatorio: "recordatório",
+    exames: "exames",
+    diagnostico: "diagnóstico",
+    plano: "plano alimentar",
+    parecer: "parecer",
+  };
+  return labels[value] ?? value.replaceAll("_", " ");
 }
 
 function formatToday() {

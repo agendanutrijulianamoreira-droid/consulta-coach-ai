@@ -1,10 +1,13 @@
 import type { ReactNode, RefObject } from "react";
 import {
   ArrowRight,
+  AlertTriangle,
   Cake,
   CalendarDays,
   CalendarRange,
+  CheckCircle2,
   Clock3,
+  FileText,
   Search,
   Stethoscope,
   UserPlus,
@@ -25,6 +28,17 @@ export type PatientRow = {
 };
 
 export type PatientView = "recent" | "birthdays";
+
+export type AttentionItem = {
+  id: string;
+  patient: Patient;
+  consultationId?: string;
+  title: string;
+  detail: string;
+  actionLabel: string;
+  section: "perfil" | "consulta";
+  tone: "urgent" | "attention" | "informative";
+};
 
 type MetricValue = number | null | undefined;
 
@@ -183,6 +197,88 @@ function MetricCard({
         </p>
       </div>
     </div>
+  );
+}
+
+export function AttentionCenter({
+  items,
+  onOpen,
+  isLoading = false,
+}: {
+  items: AttentionItem[];
+  onOpen: (item: AttentionItem) => void;
+  isLoading?: boolean;
+}) {
+  return (
+    <Card className="cach-panel mt-5 overflow-hidden">
+      <div className="flex flex-col gap-2 border-b border-border px-4 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-5">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">Atenção clínica</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            O que merece uma ação antes de encerrar o dia.
+          </p>
+        </div>
+        <span className="text-xs text-muted-foreground" aria-live="polite">
+          {isLoading
+            ? "Carregando…"
+            : items.length
+              ? `${items.length} item${items.length === 1 ? "" : "s"}`
+              : "Tudo em dia"}
+        </span>
+      </div>
+
+      {isLoading ? (
+        <div className="px-4 py-8 text-sm text-muted-foreground sm:px-5" aria-busy="true">
+          Atualizando os sinais do consultório…
+        </div>
+      ) : items.length ? (
+        <div className="divide-y divide-border">
+          {items.map((item) => {
+            const Icon =
+              item.tone === "urgent"
+                ? AlertTriangle
+                : item.tone === "attention"
+                  ? FileText
+                  : Cake;
+            const toneClass = {
+              urgent: "bg-destructive/10 text-destructive",
+              attention: "bg-sand-soft text-sand-ink",
+              informative: "bg-accent text-accent-foreground",
+            }[item.tone];
+
+            return (
+              <div key={item.id} className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:px-5">
+                <span className={`flex size-9 shrink-0 items-center justify-center rounded-full ${toneClass}`}>
+                  <Icon className="size-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">{item.title}</p>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {item.patient.name} · {item.detail}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant={item.tone === "urgent" ? "destructive" : "outline"}
+                  size="sm"
+                  className="min-h-10 shrink-0"
+                  onClick={() => onOpen(item)}
+                >
+                  {item.actionLabel} <ArrowRight />
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="flex items-center gap-3 px-4 py-8 text-sm text-muted-foreground sm:px-5">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground">
+            <CheckCircle2 className="size-4" />
+          </span>
+          Nenhuma pendência clínica foi identificada com os dados disponíveis.
+        </div>
+      )}
+    </Card>
   );
 }
 
