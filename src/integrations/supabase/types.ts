@@ -14,6 +14,80 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_proposal_events: {
+        Row: {
+          action: string
+          actor: string
+          created_at: string
+          id: string
+          note: string | null
+          owner_id: string
+          proposal_id: string
+        }
+        Insert: {
+          action: string
+          actor: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          owner_id?: string
+          proposal_id: string
+        }
+        Update: {
+          action?: string
+          actor?: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          owner_id?: string
+          proposal_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_proposal_events_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: false
+            referencedRelation: "ai_proposals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_proposals: {
+        Row: {
+          agent: string
+          body: string
+          created_at: string
+          data_summary: string | null
+          id: string
+          owner_id: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          agent: string
+          body: string
+          created_at?: string
+          data_summary?: string | null
+          id?: string
+          owner_id?: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          agent?: string
+          body?: string
+          created_at?: string
+          data_summary?: string | null
+          id?: string
+          owner_id?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       anamnesis: {
         Row: {
           consultation_id: string
@@ -80,6 +154,147 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      biz_entries: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string | null
+          due_date: string | null
+          entry_date: string
+          entry_type: string
+          id: string
+          is_demo: boolean
+          is_renewal: boolean
+          lead_id: string | null
+          offer_id: string | null
+          owner_id: string
+          status: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          entry_date?: string
+          entry_type: string
+          id?: string
+          is_demo?: boolean
+          is_renewal?: boolean
+          lead_id?: string | null
+          offer_id?: string | null
+          owner_id?: string
+          status?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          entry_date?: string
+          entry_type?: string
+          id?: string
+          is_demo?: boolean
+          is_renewal?: boolean
+          lead_id?: string | null
+          offer_id?: string | null
+          owner_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "biz_entries_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "crm_leads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "biz_entries_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "biz_offers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      biz_goals: {
+        Row: {
+          created_at: string
+          id: string
+          metric: string
+          owner_id: string
+          period_month: string
+          target: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          metric: string
+          owner_id?: string
+          period_month: string
+          target: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          metric?: string
+          owner_id?: string
+          period_month?: string
+          target?: number
+        }
+        Relationships: []
+      }
+      biz_offers: {
+        Row: {
+          active: boolean
+          cash_price: number | null
+          created_at: string
+          duration_months: number
+          id: string
+          kind: string
+          minutes_spent: number
+          monthly_capacity: number | null
+          name: string
+          owner_id: string
+          position: number
+          price: number
+          updated_at: string
+          variable_cost: number
+        }
+        Insert: {
+          active?: boolean
+          cash_price?: number | null
+          created_at?: string
+          duration_months?: number
+          id?: string
+          kind?: string
+          minutes_spent?: number
+          monthly_capacity?: number | null
+          name: string
+          owner_id?: string
+          position?: number
+          price?: number
+          updated_at?: string
+          variable_cost?: number
+        }
+        Update: {
+          active?: boolean
+          cash_price?: number | null
+          created_at?: string
+          duration_months?: number
+          id?: string
+          kind?: string
+          minutes_spent?: number
+          monthly_capacity?: number | null
+          name?: string
+          owner_id?: string
+          position?: number
+          price?: number
+          updated_at?: string
+          variable_cost?: number
+        }
+        Relationships: []
       }
       conducts: {
         Row: {
@@ -198,6 +413,106 @@ export type Database = {
             columns: ["patient_id"]
             isOneToOne: false
             referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_lead_events: {
+        Row: {
+          created_at: string
+          description: string | null
+          from_stage: string | null
+          id: string
+          kind: string
+          lead_id: string
+          owner_id: string
+          to_stage: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          from_stage?: string | null
+          id?: string
+          kind?: string
+          lead_id: string
+          owner_id?: string
+          to_stage?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          from_stage?: string | null
+          id?: string
+          kind?: string
+          lead_id?: string
+          owner_id?: string
+          to_stage?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_lead_events_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "crm_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crm_leads: {
+        Row: {
+          commercial_notes: string | null
+          created_at: string
+          email: string | null
+          id: string
+          is_demo: boolean
+          name: string
+          next_action: string | null
+          next_action_at: string | null
+          offer_id: string | null
+          owner_id: string
+          phone: string | null
+          source: string
+          stage: string
+          updated_at: string
+        }
+        Insert: {
+          commercial_notes?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_demo?: boolean
+          name: string
+          next_action?: string | null
+          next_action_at?: string | null
+          offer_id?: string | null
+          owner_id?: string
+          phone?: string | null
+          source?: string
+          stage?: string
+          updated_at?: string
+        }
+        Update: {
+          commercial_notes?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          is_demo?: boolean
+          name?: string
+          next_action?: string | null
+          next_action_at?: string | null
+          offer_id?: string | null
+          owner_id?: string
+          phone?: string | null
+          source?: string
+          stage?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crm_leads_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "biz_offers"
             referencedColumns: ["id"]
           },
         ]
@@ -566,6 +881,39 @@ export type Database = {
           },
         ]
       }
+      message_templates: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          journey_step: string
+          owner_id: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          id?: string
+          journey_step: string
+          owner_id?: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          journey_step?: string
+          owner_id?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       patients: {
         Row: {
           birth_date: string | null
@@ -702,6 +1050,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      sprint_progress: {
+        Row: {
+          answers: Json
+          checks: Json
+          completed_steps: string[]
+          created_at: string
+          current_step: string
+          id: string
+          owner_id: string
+          started_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          answers?: Json
+          checks?: Json
+          completed_steps?: string[]
+          created_at?: string
+          current_step?: string
+          id?: string
+          owner_id?: string
+          started_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          answers?: Json
+          checks?: Json
+          completed_steps?: string[]
+          created_at?: string
+          current_step?: string
+          id?: string
+          owner_id?: string
+          started_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       transcript_segments: {
         Row: {
