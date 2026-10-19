@@ -56,6 +56,9 @@
   --color-sand: var(--sand);
   --color-sand-soft: var(--sand-soft);
   --color-sand-ink: var(--sand-ink);
+  --color-reino: var(--reino);
+  --color-reino-gold: var(--reino-gold);
+  --color-reino-cream: var(--reino-cream);
   --color-blush: var(--blush);
   --color-blush-soft: var(--blush-soft);
   --color-blush-ink: var(--blush-ink);
@@ -90,6 +93,9 @@
   --sand: oklch(0.7955 0.0875 84);
   --sand-soft: oklch(0.9393 0.0258 84.59);
   --sand-ink: oklch(0.5429 0.0802 76.57);
+  --reino: #30432a;
+  --reino-gold: #be8f28;
+  --reino-cream: #faf7ed;
   --blush: oklch(0.7809 0.0588 27.81);
   --blush-soft: oklch(0.9396 0.0183 34.3);
   --blush-ink: oklch(0.5484 0.0766 24.14);
@@ -133,6 +139,9 @@
 }
 
 .dark {
+  --reino: #7d9a72;
+  --reino-gold: #d4a74a;
+  --reino-cream: #23281f;
   --pine: oklch(0.2479 0.0277 180);
   --pine-soft: oklch(0.42 0.0589 179.01);
   --sage: oklch(0.35 0.03 172);
