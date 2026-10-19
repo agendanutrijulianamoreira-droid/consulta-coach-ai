@@ -9,11 +9,11 @@ const lead = (p: Partial<KpiLead>): KpiLead => ({ id: crypto.randomUUID(), sourc
 describe("KPIs", () => {
   test("denominador zero vira N/D (null)", () => {
     const k = computeKpis({ ...base, leads: [], entries: [] });
-    expect(k.averageTicket).toBeNull();
-    expect(k.schedulingRate).toBeNull();
-    expect(k.attendanceRate).toBeNull();
-    expect(k.margin).toBeNull();
-    expect(k.delinquencyRate).toBeNull();
+    expect(k.averageTicket).toBe(null);
+    expect(k.schedulingRate).toBe(null);
+    expect(k.attendanceRate).toBe(null);
+    expect(k.margin).toBe(null);
+    expect(k.delinquencyRate).toBe(null);
   });
 
   test("contratado, recebido e reconhecido não se somam", () => {
@@ -42,7 +42,7 @@ describe("KPIs", () => {
     const leads = [lead({ stage: "ganho" }), lead({ stage: "realizada" }), lead({ stage: "confirmada" }), lead({ stage: "novo" })];
     const k = computeKpis({ ...base, leads, entries: [] });
     expect(k.schedulingRate).toBe(0.75);
-    expect(k.attendanceRate).toBeCloseTo(2 / 3);
+    expect(Math.round((k.attendanceRate ?? 0) * 1000)).toBe(667);
     expect(k.protocolConversion).toBe(0.5);
   });
 
@@ -85,7 +85,7 @@ describe("wizard", () => {
     const leads = [{ id: "a", phone: "(31) 99945-8139", email: null }, { id: "b", phone: null, email: "X@Y.com" }];
     expect(findDuplicateLead(leads, { phone: "+55 31 999458139" })?.id).toBe("a");
     expect(findDuplicateLead(leads, { email: " x@y.com" })?.id).toBe("b");
-    expect(findDuplicateLead(leads, { phone: "123" })).toBeUndefined();
+    expect(findDuplicateLead(leads, { phone: "123" })).toBe(undefined);
   });
   test("mês no fuso de São Paulo", () => {
     expect(monthRangeSP(new Date("2026-11-01T02:00:00Z"))).toEqual({ from: "2026-10-01", to: "2026-10-31" });
