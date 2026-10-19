@@ -61,6 +61,7 @@ export async function createOffer(input: {
   duration_months?: number;
   variable_cost?: number;
   minutes_spent?: number;
+  position?: number;
 }) {
   return unwrap(await supabase.from("biz_offers").insert(input).select().single()) as Offer;
 }
@@ -94,9 +95,39 @@ export async function createLead(input: {
 }
 
 export async function updateLead(id: string, input: Partial<Lead>) {
-  return unwrap(
+  const current = unwrap(
+    await supabase.from("crm_leads").select("*").eq("id", id).single(),
+  ) as Lead;
+  const updated = unwrap(
     await supabase.from("crm_leads").update(input).eq("id", id).select().single(),
   ) as Lead;
+  if (input.stage && input.stage !== current.stage) {
+    await recordLeadEvent({
+      lead_id: id,
+      kind: "mudanca_estagio",
+      from_stage: current.stage,
+      to_stage: input.stage,
+      description: `Estágio alterado de ${current.stage} para ${input.stage}`,
+    });
+  }
+  return updated;
+}
+
+export async function deleteLead(id: string) {
+  const { error } = await supabase.from("crm_leads").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+export async function recordLeadEvent(input: {
+  lead_id: string;
+  kind: string;
+  from_stage?: string | null;
+  to_stage?: string | null;
+  description?: string | null;
+}) {
+  return unwrap(
+    await supabase.from("crm_lead_events").insert(input).select().single(),
+  ) as LeadEvent;
 }
 
 export async function listLeadEvents() {
@@ -111,6 +142,36 @@ export async function listEntries() {
   ) as Entry[];
 }
 
+export async function createEntry(input: {
+  entry_type: "contrato" | "recebimento" | "reconhecimento";
+  amount: number;
+  entry_date: string;
+  due_date?: string | null;
+  status?: "ok" | "pendente" | "atrasado";
+  is_renewal?: boolean;
+  offer_id?: string | null;
+  lead_id?: string | null;
+  description?: string | null;
+}) {
+  return unwrap(await supabase.from("biz_entries").insert(input).select().single()) as Entry;
+}
+
+export async function listGoals(periodMonth: string) {
+  return unwrap(
+    await supabase.from("biz_goals").select("*").eq("period_month", periodMonth),
+  ) as Tables["biz_goals"]["Row"][];
+}
+
+export async function upsertGoal(input: { metric: string; target: number; period_month: string }) {
+  return unwrap(
+    await supabase
+      .from("biz_goals")
+      .upsert(input, { onConflict: "owner_id,metric,period_month" })
+      .select()
+      .single(),
+  ) as Tables["biz_goals"]["Row"];
+}
+
 export async function listProposals() {
   return unwrap(
     await supabase.from("ai_proposals").select("*").order("created_at", { ascending: false }),
@@ -123,8 +184,36 @@ export async function updateProposal(id: string, status: string) {
   ) as Proposal;
 }
 
+export async function recordProposalEvent(input: {
+  proposal_id: string;
+  actor: string;
+  action: string;
+  note?: string | null;
+}) {
+  return unwrap(await supabase.from("ai_proposal_events").insert(input).select().single());
+}
+
 export async function listMessageTemplates() {
   return unwrap(
     await supabase.from("message_templates").select("*").order("created_at"),
   ) as MessageTemplate[];
+}
+
+export async function createMessageTemplate(input: {
+  journey_step: string;
+  title: string;
+  body: string;
+}) {
+  return unwrap(
+    await supabase.from("message_templates").insert(input).select().single(),
+  ) as MessageTemplate;
+}
+
+export async function updateMessageTemplate(
+  id: string,
+  input: { title?: string; body?: string; status?: "rascunho" | "aprovado" },
+) {
+  return unwrap(
+    await supabase.from("message_templates").update(input).eq("id", id).select().single(),
+  ) as MessageTemplate;
 }

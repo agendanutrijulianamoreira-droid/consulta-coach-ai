@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
@@ -37,10 +37,10 @@ import {
   type ChecklistState,
   type OfferKind,
 } from "@/modules/sprint/domain/sprint";
-import { computeKpis, monthRangeSP, brl, pct } from "@/modules/sprint/domain/kpis";
+import { computeKpis, monthRangeSP, brl, pct, type KpiEntry } from "@/modules/sprint/domain/kpis";
 import * as db from "@/modules/sprint/infrastructure/repository";
 
-type WorkspaceTab = "sprint" | "ofertas" | "crm" | "kpis" | "ia";
+type WorkspaceTab = "sprint" | "ofertas" | "crm" | "financeiro" | "kpis" | "ia";
 
 export function StructuredOffice() {
   const [tab, setTab] = useState<WorkspaceTab>("sprint");
@@ -48,6 +48,7 @@ export function StructuredOffice() {
     { id: "sprint", label: "Sprint 90", icon: Target },
     { id: "ofertas", label: "Ofertas", icon: DollarSign },
     { id: "crm", label: "CRM", icon: Users },
+    { id: "financeiro", label: "Financeiro", icon: DollarSign },
     { id: "kpis", label: "KPIs", icon: BarChart3 },
     { id: "ia", label: "Central IA", icon: Sparkles },
   ];
@@ -85,6 +86,7 @@ export function StructuredOffice() {
       {tab === "sprint" ? <SprintWizard /> : null}
       {tab === "ofertas" ? <OffersPanel /> : null}
       {tab === "crm" ? <CrmPanel /> : null}
+      {tab === "financeiro" ? <FinancePanel /> : null}
       {tab === "kpis" ? <KpisPanel /> : null}
       {tab === "ia" ? <AiPanel /> : null}
     </div>
@@ -100,14 +102,15 @@ function SprintWizard() {
   const [completed, setCompleted] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
-  if (progress.data && !hydrated) {
+  useEffect(() => {
+    if (!progress.data || hydrated) return;
     setAnswers((progress.data.answers ?? {}) as Answers);
     setChecks((progress.data.checks ?? {}) as ChecklistState);
     setCompleted(progress.data.completed_steps ?? []);
     const savedIndex = SPRINT_STEPS.findIndex((step) => step.id === progress.data?.current_step);
     if (savedIndex >= 0) setStepIndex(savedIndex);
     setHydrated(true);
-  }
+  }, [hydrated, progress.data]);
 
   const step = SPRINT_STEPS[stepIndex]!;
   const status = stepStatus(step, answers, checks);
@@ -339,6 +342,15 @@ function OffersPanel() {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["sprint-offers"] }),
     onError: (error: Error) => toast.error(error.message),
   });
+  const edit = useMutation({
+    mutationFn: ({ id, name, price }: { id: string; name: string; price: number }) =>
+      db.updateOffer(id, { name, price }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["sprint-offers"] });
+      toast.success("Oferta atualizada.");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
   const seed = useMutation({
     mutationFn: async () =>
       Promise.all(SEED_OFFERS.map((offer, position) => db.createOffer({ ...offer, position }))),
@@ -428,6 +440,18 @@ function OffersPanel() {
                       margem {brl(margin)}
                     </Badge>
                     <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const name = window.prompt("Nome da oferta", offer.name);
+                        const price = window.prompt("Preço", String(offer.price));
+                        if (name?.trim() && price && Number(price) >= 0)
+                          edit.mutate({ id: offer.id, name: name.trim(), price: Number(price) });
+                      }}
+                    >
+                      Editar
+                    </Button>
+                    <Button
                       variant="ghost"
                       size="icon"
                       aria-label={`Excluir ${offer.name}`}
@@ -469,6 +493,24 @@ function CrmPanel() {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["sprint-leads"] }),
     onError: (error: Error) => toast.error(error.message),
   });
+  const updateDetails = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => db.updateLead(id, { name }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["sprint-leads"] }),
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const remove = useMutation({
+    mutationFn: db.deleteLead,
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["sprint-leads"] }),
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const columns = useMemo(
+    () =>
+      CRM_STAGES.map((stage) => ({
+        ...stage,
+        leads: (leads.data ?? []).filter((lead) => lead.stage === stage.id),
+      })),
+    [leads.data],
+  );
   return (
     <div className="space-y-5">
       <Card>
@@ -515,46 +557,68 @@ function CrmPanel() {
       </Card>
       <Card>
         <CardContent className="pt-6">
-          <div className="space-y-3">
-            {(leads.data ?? []).map((lead) => (
-              <div
-                key={lead.id}
-                className="grid gap-3 rounded-lg border border-border p-4 md:grid-cols-[minmax(0,1fr)_220px_220px]"
-              >
-                <div>
-                  <p className="font-medium">{lead.name}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {lead.phone || "Sem telefone"} ·{" "}
-                    {LEAD_SOURCES.find((source) => source.id === lead.source)?.label ?? lead.source}
-                  </p>
-                  {lead.next_action ? (
-                    <p className="mt-2 text-xs">
-                      <span className="font-semibold">Próxima ação:</span> {lead.next_action}
-                    </p>
-                  ) : null}
+          <div className="grid gap-3 overflow-x-auto pb-2 xl:grid-cols-5">
+            {columns.map((column) => (
+              <div key={column.id} className="min-w-[220px] rounded-lg bg-muted/30 p-2">
+                <div className="mb-2 flex items-center justify-between px-2">
+                  <p className="text-xs font-semibold">{column.label}</p>
+                  <Badge variant="outline">{column.leads.length}</Badge>
                 </div>
-                <select
-                  className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-                  value={lead.stage}
-                  onChange={(event) => update.mutate({ id: lead.id, stage: event.target.value })}
-                >
-                  {CRM_STAGES.map((stage) => (
-                    <option key={stage.id} value={stage.id}>
-                      {stage.label}
-                    </option>
+                <div className="space-y-2">
+                  {column.leads.map((lead) => (
+                    <div
+                      key={lead.id}
+                      className="rounded-md border border-border bg-background p-3 shadow-sm"
+                    >
+                      <p className="text-sm font-medium">{lead.name}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {lead.phone || "Sem telefone"} ·{" "}
+                        {LEAD_SOURCES.find((source) => source.id === lead.source)?.label ??
+                          lead.source}
+                      </p>
+                      {lead.next_action ? (
+                        <p className="mt-2 text-xs">
+                          <span className="font-semibold">Próxima:</span> {lead.next_action}
+                        </p>
+                      ) : null}
+                      <select
+                        className="mt-2 h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+                        value={lead.stage}
+                        onChange={(event) =>
+                          update.mutate({ id: lead.id, stage: event.target.value })
+                        }
+                      >
+                        {CRM_STAGES.map((stage) => (
+                          <option key={stage.id} value={stage.id}>
+                            {stage.label}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="mt-2 flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            const name = window.prompt("Nome do lead", lead.name);
+                            if (name?.trim())
+                              updateDetails.mutate({ id: lead.id, name: name.trim() });
+                          }}
+                        >
+                          Editar
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => remove.mutate(lead.id)}>
+                          Excluir
+                        </Button>
+                      </div>
+                    </div>
                   ))}
-                </select>
-                <div className="flex items-center justify-end">
-                  <Badge variant={lead.stage === "ganho" ? "default" : "outline"}>
-                    {CRM_STAGES.find((stage) => stage.id === lead.stage)?.label ?? lead.stage}
-                  </Badge>
                 </div>
               </div>
             ))}
-            {!leads.data?.length ? (
-              <p className="py-10 text-center text-sm text-muted-foreground">Nenhum lead no CRM.</p>
-            ) : null}
           </div>
+          {!leads.data?.length ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">Nenhum lead no CRM.</p>
+          ) : null}
         </CardContent>
       </Card>
     </div>
@@ -572,7 +636,11 @@ function KpisPanel() {
       computeKpis({
         leads: leads.data ?? [],
         events: events.data ?? [],
-        entries: entries.data ?? [],
+        entries: (entries.data ?? []).map((entry) => ({
+          ...entry,
+          entry_type: entry.entry_type as KpiEntry["entry_type"],
+          status: entry.status as KpiEntry["status"],
+        })),
         offers: offers.data ?? [],
         ...range,
         includeDemo: false,
@@ -625,6 +693,124 @@ function KpisPanel() {
   );
 }
 
+function FinancePanel() {
+  const queryClient = useQueryClient();
+  const entries = useQuery({ queryKey: ["sprint-entries"], queryFn: db.listEntries });
+  const [draft, setDraft] = useState({
+    entry_type: "recebimento" as "contrato" | "recebimento" | "reconhecimento",
+    amount: "",
+    entry_date: new Date().toISOString().slice(0, 10),
+    due_date: "",
+    status: "ok" as "ok" | "pendente" | "atrasado",
+    description: "",
+  });
+  const create = useMutation({
+    mutationFn: () =>
+      db.createEntry({
+        entry_type: draft.entry_type,
+        amount: Number(draft.amount),
+        entry_date: draft.entry_date,
+        due_date: draft.due_date || null,
+        status: draft.status,
+        description: draft.description || null,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["sprint-entries"] });
+      setDraft({ ...draft, amount: "", description: "" });
+      toast.success("Lançamento registrado.");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  return (
+    <div className="space-y-5">
+      <Card>
+        <CardHeader>
+          <CardTitle>Lançamentos financeiros</CardTitle>
+          <CardDescription>
+            Registre contrato, recebimento e reconhecimento separadamente. Os KPIs não inferem
+            pagamento pelo estágio do CRM.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-[180px_150px_160px_160px_160px_minmax(0,1fr)_auto]">
+          <select
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+            value={draft.entry_type}
+            onChange={(e) =>
+              setDraft({ ...draft, entry_type: e.target.value as typeof draft.entry_type })
+            }
+          >
+            <option value="contrato">Contrato</option>
+            <option value="recebimento">Recebimento</option>
+            <option value="reconhecimento">Reconhecimento</option>
+          </select>
+          <Input
+            type="number"
+            min="0"
+            placeholder="Valor"
+            value={draft.amount}
+            onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
+          />
+          <Input
+            type="date"
+            value={draft.entry_date}
+            onChange={(e) => setDraft({ ...draft, entry_date: e.target.value })}
+          />
+          <Input
+            type="date"
+            value={draft.due_date}
+            onChange={(e) => setDraft({ ...draft, due_date: e.target.value })}
+          />
+          <select
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+            value={draft.status}
+            onChange={(e) => setDraft({ ...draft, status: e.target.value as typeof draft.status })}
+          >
+            <option value="ok">Pago/ok</option>
+            <option value="pendente">Pendente</option>
+            <option value="atrasado">Atrasado</option>
+          </select>
+          <Input
+            placeholder="Descrição"
+            value={draft.description}
+            onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+          />
+          <Button
+            disabled={create.isPending || Number(draft.amount) <= 0}
+            onClick={() => create.mutate()}
+          >
+            <Plus /> Registrar
+          </Button>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="pt-6">
+          <div className="divide-y divide-border">
+            {(entries.data ?? []).map((entry) => (
+              <div
+                key={entry.id}
+                className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0"
+              >
+                <div>
+                  <p className="font-medium">{entry.description || entry.entry_type}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {entry.entry_date} · {entry.status}
+                  </p>
+                </div>
+                <span className="font-semibold">{brl(Number(entry.amount))}</span>
+              </div>
+            ))}
+            {!entries.data?.length ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                Nenhum lançamento ainda.
+              </p>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function KpiLine({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-border bg-muted/20 p-4">
@@ -636,11 +822,26 @@ function KpiLine({ label, value }: { label: string; value: string }) {
 
 function AiPanel() {
   const queryClient = useQueryClient();
+  const [editingTemplate, setEditingTemplate] = useState<string | null>(null);
+  const [templateDraft, setTemplateDraft] = useState({ title: "", body: "" });
   const proposals = useQuery({ queryKey: ["sprint-proposals"], queryFn: db.listProposals });
   const templates = useQuery({ queryKey: ["sprint-templates"], queryFn: db.listMessageTemplates });
   const update = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) => db.updateProposal(id, status),
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const proposal = await db.updateProposal(id, status);
+      await db.recordProposalEvent({ proposal_id: id, actor: "owner", action: status });
+      return proposal;
+    },
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["sprint-proposals"] }),
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const saveTemplate = useMutation({
+    mutationFn: ({ id }: { id: string }) => db.updateMessageTemplate(id, templateDraft),
+    onSuccess: () => {
+      setEditingTemplate(null);
+      void queryClient.invalidateQueries({ queryKey: ["sprint-templates"] });
+      toast.success("Template salvo.");
+    },
     onError: (error: Error) => toast.error(error.message),
   });
   return (
@@ -709,7 +910,46 @@ function AiPanel() {
                   {"status" in template ? template.status : "rascunho"}
                 </Badge>
               </div>
-              <p className="mt-2 text-xs leading-5 text-muted-foreground">{template.body}</p>
+              {"id" in template && editingTemplate === template.id ? (
+                <div className="mt-3 space-y-2">
+                  <Input
+                    value={templateDraft.title}
+                    onChange={(e) => setTemplateDraft({ ...templateDraft, title: e.target.value })}
+                  />
+                  <Textarea
+                    rows={4}
+                    value={templateDraft.body}
+                    onChange={(e) => setTemplateDraft({ ...templateDraft, body: e.target.value })}
+                  />
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => saveTemplate.mutate({ id: template.id })}>
+                      Salvar
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditingTemplate(null)}>
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
+                    {template.body}
+                  </p>
+                  {"id" in template ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-3"
+                      onClick={() => {
+                        setEditingTemplate(template.id);
+                        setTemplateDraft({ title: template.title, body: template.body });
+                      }}
+                    >
+                      Editar template
+                    </Button>
+                  ) : null}
+                </>
+              )}
             </div>
           ))}
         </CardContent>
