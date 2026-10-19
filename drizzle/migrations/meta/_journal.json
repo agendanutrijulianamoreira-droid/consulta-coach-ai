@@ -8,6 +8,13 @@
       "when": 1791049194674,
       "tag": "0000_secure_clinical_data_and_complete_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792424562054,
+      "tag": "0001_consultorio_sprint_90",
+      "breakpoints": true
     }
   ]
 }
