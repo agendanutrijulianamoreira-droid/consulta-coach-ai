@@ -303,6 +303,34 @@ function MetabolicEditor({
     setPatientSummary((current) => current || assessment.patient_summary || "");
   }, [assessment]);
   useEffect(() => {
+    const stored = assessment?.capacity;
+    if (!stored) return;
+    setCapacity((current) => {
+      const hasDraft = [
+        current.right,
+        current.left,
+        current.protocol,
+        current.date,
+        current.span,
+        current.spanMethod,
+        current.purpose,
+        current.notes,
+      ].some(Boolean);
+      if (hasDraft) return current;
+      return {
+        right: stored.right_grip_kgf == null ? "" : String(stored.right_grip_kgf),
+        left: stored.left_grip_kgf == null ? "" : String(stored.left_grip_kgf),
+        protocol: stored.grip_protocol ?? "",
+        date: stored.grip_measured_at ?? "",
+        span: stored.span_value == null ? "" : String(stored.span_value),
+        spanUnit: stored.span_unit ?? "cm",
+        spanMethod: stored.span_method ?? "",
+        purpose: stored.span_purpose ?? "",
+        notes: stored.notes ?? "",
+      };
+    });
+  }, [assessment]);
+  useEffect(() => {
     if (!assessment || (!clinicalSummary && !patientSummary)) return;
     const timer = window.setTimeout(
       () =>
