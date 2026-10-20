@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
@@ -112,6 +112,7 @@ function SprintWizard() {
   const [hydrated, setHydrated] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [timerRunning, setTimerRunning] = useState(false);
+  const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
 
   useEffect(() => {
     if (!progress.data || hydrated) return;
@@ -132,9 +133,15 @@ function SprintWizard() {
   const step = SPRINT_STEPS[stepIndex]!;
   const status = stepStatus(step, answers, checks);
   const progressPercent = sprintProgress(completed);
+  const persist = useCallback((payload: Parameters<typeof db.saveSprintProgress>[0]) => {
+    saveQueue.current = saveQueue.current
+      .catch(() => undefined)
+      .then(() => db.saveSprintProgress(payload));
+    return saveQueue.current;
+  }, []);
   const save = useMutation({
     mutationFn: () =>
-      db.saveSprintProgress({
+      persist({
         answers,
         checks,
         completed_steps: completed,
@@ -150,14 +157,12 @@ function SprintWizard() {
   useEffect(() => {
     if (!hydrated) return;
     const timeout = window.setTimeout(() => {
-      void db
-        .saveSprintProgress({
-          answers,
-          checks,
-          completed_steps: completed,
-          current_step: step.id,
-        })
-        .catch(() => undefined);
+      void persist({
+        answers,
+        checks,
+        completed_steps: completed,
+        current_step: step.id,
+      }).catch(() => undefined);
     }, 700);
     return () => window.clearTimeout(timeout);
   }, [answers, checks, completed, hydrated, step.id]);
@@ -171,13 +176,12 @@ function SprintWizard() {
     const nextIndex = Math.min(stepIndex + 1, SPRINT_STEPS.length - 1);
     setCompleted(nextCompleted);
     setStepIndex(nextIndex);
-    void db
-      .saveSprintProgress({
-        answers,
-        checks,
-        completed_steps: nextCompleted,
-        current_step: SPRINT_STEPS[nextIndex]!.id,
-      })
+    void persist({
+      answers,
+      checks,
+      completed_steps: nextCompleted,
+      current_step: SPRINT_STEPS[nextIndex]!.id,
+    })
       .then(() => queryClient.invalidateQueries({ queryKey: ["sprint-progress"] }))
       .catch((error: Error) => toast.error(error.message));
   };
