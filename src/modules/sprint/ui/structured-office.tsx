@@ -31,13 +31,22 @@ import {
   SPRINT_STEPS,
   UNKNOWN,
   JOURNEY_TEMPLATES,
+  DELIVERABLES,
+  ROUTINES,
   stepStatus,
   sprintProgress,
   type Answers,
   type ChecklistState,
   type OfferKind,
 } from "@/modules/sprint/domain/sprint";
-import { computeKpis, monthRangeSP, brl, pct, type KpiEntry } from "@/modules/sprint/domain/kpis";
+import {
+  computeKpis,
+  monthRangeSP,
+  brl,
+  pct,
+  simulateMix,
+  type KpiEntry,
+} from "@/modules/sprint/domain/kpis";
 import * as db from "@/modules/sprint/infrastructure/repository";
 
 type WorkspaceTab = "sprint" | "ofertas" | "crm" | "financeiro" | "kpis" | "ia";
@@ -101,6 +110,8 @@ function SprintWizard() {
   const [checks, setChecks] = useState<ChecklistState>({});
   const [completed, setCompleted] = useState<string[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [timerRunning, setTimerRunning] = useState(false);
 
   useEffect(() => {
     if (!progress.data || hydrated) return;
@@ -111,6 +122,12 @@ function SprintWizard() {
     if (savedIndex >= 0) setStepIndex(savedIndex);
     setHydrated(true);
   }, [hydrated, progress.data]);
+
+  useEffect(() => {
+    if (!timerRunning) return;
+    const timer = window.setInterval(() => setElapsed((value) => value + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [timerRunning]);
 
   const step = SPRINT_STEPS[stepIndex]!;
   const status = stepStatus(step, answers, checks);
@@ -129,6 +146,21 @@ function SprintWizard() {
     },
     onError: (error: Error) => toast.error(error.message),
   });
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const timeout = window.setTimeout(() => {
+      void db
+        .saveSprintProgress({
+          answers,
+          checks,
+          completed_steps: completed,
+          current_step: step.id,
+        })
+        .catch(() => undefined);
+    }, 700);
+    return () => window.clearTimeout(timeout);
+  }, [answers, checks, completed, hydrated, step.id]);
 
   const completeStep = () => {
     if (!status.canComplete) {
@@ -156,6 +188,34 @@ function SprintWizard() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Roteiro da sprint</CardTitle>
           <CardDescription>{progressPercent}% concluído</CardDescription>
+          <div className="rounded-lg border border-border bg-muted/30 p-3">
+            <div className="flex items-center justify-between text-xs font-medium">
+              <span>Timer da sprint</span>
+              <span className="tabular-nums">
+                {String(Math.floor(elapsed / 60)).padStart(2, "0")}:
+                {String(elapsed % 60).padStart(2, "0")}
+              </span>
+            </div>
+            <div className="mt-2 flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setTimerRunning((value) => !value)}
+              >
+                {timerRunning ? "Pausar" : "Iniciar"}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setElapsed(0);
+                  setTimerRunning(false);
+                }}
+              >
+                Zerar
+              </Button>
+            </div>
+          </div>
           <div className="h-2 overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-primary transition-all"
@@ -301,7 +361,97 @@ function SprintWizard() {
           </div>
         </CardContent>
       </Card>
+
+      <SprintCompletionPanel
+        checks={checks}
+        setChecks={setChecks}
+        answers={answers}
+        setAnswers={setAnswers}
+      />
     </div>
+  );
+}
+
+function SprintCompletionPanel({
+  checks,
+  setChecks,
+  answers,
+  setAnswers,
+}: {
+  checks: ChecklistState;
+  setChecks: (value: ChecklistState) => void;
+  answers: Answers;
+  setAnswers: (value: Answers) => void;
+}) {
+  const toggle = (key: string) => setChecks({ ...checks, [key]: !checks[key] });
+  return (
+    <Card className="xl:col-span-2">
+      <CardHeader>
+        <CardTitle>Ativação e dossiê de 90 dias</CardTitle>
+        <CardDescription>
+          Rotinas, entregáveis e revisão ficam salvos junto do Sprint 90.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-5 lg:grid-cols-3">
+        <div>
+          <p className="text-sm font-semibold">Próximos 7 dias</p>
+          <div className="mt-3 space-y-2">
+            {SPRINT_7_DAYS.map((item, index) => (
+              <label key={item} className="flex gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={Boolean(checks[`sprint7.${index}`])}
+                  onChange={() => toggle(`sprint7.${index}`)}
+                />
+                {item}
+              </label>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-sm font-semibold">Rotinas</p>
+          <div className="mt-3 space-y-3">
+            {ROUTINES.map((group) => (
+              <div key={group.group}>
+                <p className="text-xs font-medium text-muted-foreground">{group.group}</p>
+                {group.items.map((item) => (
+                  <label key={item.key} className="mt-2 flex gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(checks[`routine.${item.key}`])}
+                      onChange={() => toggle(`routine.${item.key}`)}
+                    />
+                    {item.label}
+                  </label>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="text-sm font-semibold">Entregáveis e dossiê</p>
+          <div className="mt-3 max-h-56 space-y-2 overflow-y-auto">
+            {DELIVERABLES.map((item, index) => (
+              <label key={item} className="flex gap-2 text-xs">
+                <input
+                  type="checkbox"
+                  checked={Boolean(checks[`deliverable.${index}`])}
+                  onChange={() => toggle(`deliverable.${index}`)}
+                />
+                {item}
+              </label>
+            ))}
+          </div>
+          <Textarea
+            className="mt-3"
+            rows={3}
+            placeholder="Notas da revisão de 30/60/90 dias"
+            value={answers["dossier_notes"] ?? ""}
+            onChange={(event) => setAnswers({ ...answers, dossier_notes: event.target.value })}
+          />
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -696,6 +846,7 @@ function KpisPanel() {
 function FinancePanel() {
   const queryClient = useQueryClient();
   const entries = useQuery({ queryKey: ["sprint-entries"], queryFn: db.listEntries });
+  const offers = useQuery({ queryKey: ["sprint-offers"], queryFn: db.listOffers });
   const [draft, setDraft] = useState({
     entry_type: "recebimento" as "contrato" | "recebimento" | "reconhecimento",
     amount: "",
@@ -782,6 +933,7 @@ function FinancePanel() {
           </Button>
         </CardContent>
       </Card>
+      <MixSimulator offers={offers.data ?? []} />
       <Card>
         <CardContent className="pt-6">
           <div className="divide-y divide-border">
@@ -808,6 +960,65 @@ function FinancePanel() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function MixSimulator({ offers }: { offers: db.Offer[] }) {
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const goal = 30000;
+  const lines = offers.map((offer) => ({
+    price: Number(offer.price),
+    quantity: quantities[offer.id] ?? 0,
+    installments: Math.max(1, offer.duration_months || 1),
+    duration_months: offer.duration_months,
+    kind: offer.kind,
+  }));
+  const result = simulateMix(lines, goal);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Simulador de mix e capacidade</CardTitle>
+        <CardDescription>
+          Meta padrão de R$ 30.000. Ajuste quantidades para visualizar contratado, caixa,
+          reconhecido e gap.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-2 md:grid-cols-2">
+          {offers.map((offer) => (
+            <label
+              key={offer.id}
+              className="flex items-center justify-between gap-3 rounded-md border border-border p-3 text-sm"
+            >
+              <span>
+                {offer.name}
+                <small className="ml-2 text-muted-foreground">
+                  {brl(Number(offer.price))} · {offer.minutes_spent} min
+                </small>
+              </span>
+              <Input
+                className="w-24"
+                type="number"
+                min="0"
+                value={quantities[offer.id] ?? 0}
+                onChange={(event) =>
+                  setQuantities({
+                    ...quantities,
+                    [offer.id]: Math.max(0, Number(event.target.value)),
+                  })
+                }
+              />
+            </label>
+          ))}
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-4">
+          <KpiLine label="Contratado" value={brl(result.contracted)} />
+          <KpiLine label="Caixa estimado" value={brl(result.cash)} />
+          <KpiLine label="Reconhecido" value={brl(result.recognized)} />
+          <KpiLine label="Gap da meta" value={brl(result.gap)} />
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
