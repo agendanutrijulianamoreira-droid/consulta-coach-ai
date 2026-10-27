@@ -111,7 +111,7 @@ export function LabAssessmentPanel({ consultationId, patientId, context, onCount
     if (!text.trim()) return;
     setBusy("extract");
     try { await importExtraction(await extractText({ data: { text } }), "dictation"); setPasteText(""); }
-    catch (error) { toast.error(errorMessage(error)); } finally { setBusy(null); }
+    catch (error) { toast.error(extractionErrorMessage(error)); } finally { setBusy(null); }
   }
 
   async function handleFile(file: File) {
@@ -129,7 +129,7 @@ export function LabAssessmentPanel({ consultationId, patientId, context, onCount
       const mimeType = file.type as (typeof allowed)[number];
       const extraction = await extractFile({ data: { fileBase64: await fileToBase64(file), mimeType, filename: file.name } });
       await importExtraction(extraction, mimeType === "application/pdf" ? "pdf" : "image");
-    } catch (error) { toast.error(errorMessage(error)); }
+    } catch (error) { toast.error(extractionErrorMessage(error)); }
     finally { setBusy(null); if (fileInput.current) fileInput.current.value = ""; }
   }
 
@@ -217,4 +217,12 @@ function parseNumber(value: string) { if (!value.trim()) return null; const pars
 function formatValue(value: number | null) { return value === null ? "—" : value.toLocaleString("pt-BR", { maximumFractionDigits: 2 }); }
 function formatDate(value: string) { if (!value) return "—"; const date = new Date(`${value.slice(0, 10)}T12:00:00`); return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("pt-BR"); }
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : "Não foi possível concluir a operação."; }
+/** Leitura automática depende da IA do servidor; quando ela falta, sugere o caminho manual que já funciona. */
+function extractionErrorMessage(error: unknown) {
+  const message = errorMessage(error);
+  if (message.includes("não está configurada no servidor")) {
+    return "Leitura automática indisponível neste ambiente. Use \"Entrada rápida\" para digitar os resultados manualmente.";
+  }
+  return message;
+}
 function fileToBase64(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onerror = () => reject(new Error("Não foi possível ler o arquivo.")); reader.onload = () => { const dataUrl = String(reader.result ?? ""); const comma = dataUrl.indexOf(","); if (comma < 0) reject(new Error("Arquivo inválido.")); else resolve(dataUrl.slice(comma + 1)); }; reader.readAsDataURL(file); }); }
