@@ -121,6 +121,13 @@ export function PatientWorkspaceDialog({
   }, [open, patientId, initialConsultationId, initialSection]);
 
   const selectSection = (next: WorkspaceSection) => {
+    // Parecer não tem etapa própria dentro de ConsultationWorkspace: com uma
+    // consulta já aberta, ir direto para o parecer dela em vez de cair na
+    // etapa 0 (fallback de WORKSPACE_STEPS para uma seção sem mapeamento).
+    if (next === "parecer" && consultationId) {
+      window.location.href = `/parecer/${consultationId}`;
+      return;
+    }
     setSection(next);
   };
 
