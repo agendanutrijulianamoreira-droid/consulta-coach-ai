@@ -85,7 +85,7 @@ export function ConsultationWorkspace({
   const [labCount, setLabCount] = useState(0);
   const [hypotheses, setHypotheses] = useState<string[]>([]);
   const [flags, setFlags] = useState<string[]>([]);
-  const [conduct, setConduct] = useState<db.ConductRow>({ phase: "adaptacao", kcal: 2000, protein_g: null, carb_g: null, fat_g: null, meals_count: 5, goal: "emagrecimento", preferences: [], restrictions: [], notes: "" });
+  const [conduct, setConduct] = useState<db.ConductRow>({ phase: "Adaptação", kcal: 2000, protein_g: null, carb_g: null, fat_g: null, meals_count: 5, goal: "emagrecimento", preferences: [], restrictions: [], notes: "" });
   const [plan, setPlan] = useState<{ plan: MealPlan; rationale: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);

@@ -65,6 +65,7 @@ export function ClinicalModuleSection({ patientId, section, initialConsultationI
   const createRecord = useMutation({
     mutationFn: () => historyDb.createModuleRecord(patientId, date),
     onSuccess: async (consultation) => {
+      if (section === "parecer") { window.location.href = `/parecer/${consultation.id}`; return; }
       if (onOpenConsultation) { onOpenConsultation(consultation.id); await refresh(); return; }
       setSelectedId(consultation.id);
       setMode("editor");
@@ -77,6 +78,7 @@ export function ClinicalModuleSection({ patientId, section, initialConsultationI
     mutationFn: (sourceId: string) => historyDb.duplicateClinicalModule(patientId, sourceId, section, date),
     onSuccess: async (consultation) => {
       toast.success(`${capitalize(LABELS[section].singular)} duplicado.`);
+      if (section === "parecer") { window.location.href = `/parecer/${consultation.id}`; return; }
       if (onOpenConsultation) { onOpenConsultation(consultation.id); await refresh(); return; }
       setSelectedId(consultation.id);
       setMode("editor");
@@ -194,7 +196,11 @@ export function ClinicalModuleSection({ patientId, section, initialConsultationI
                 {mode === "list" ? <p className="text-xs text-muted-foreground">{summary}</p> : null}
                 {mode === "list" ? (
                   <div className="flex flex-wrap items-center justify-end gap-1">
-                    <Button size="sm" variant="ghost" onClick={() => { if (onOpenConsultation) onOpenConsultation(consultation.id); else { setSelectedId(consultation.id); setMode("editor"); } }}>Abrir</Button>
+                    {section === "parecer" ? (
+                      <Button asChild size="sm" variant="ghost"><a href={`/parecer/${consultation.id}`}>Abrir</a></Button>
+                    ) : (
+                      <Button size="sm" variant="ghost" onClick={() => { if (onOpenConsultation) onOpenConsultation(consultation.id); else { setSelectedId(consultation.id); setMode("editor"); } }}>Abrir</Button>
+                    )}
                     <Button size="sm" variant="ghost" disabled={duplicate.isPending} onClick={() => duplicate.mutate(consultation.id)}><Copy /> Duplicar</Button>
                     {section === "plano" && plan ? (
                       <Button size="sm" variant="ghost" disabled={favorite.isPending} onClick={() => favorite.mutate({ consultationId: consultation.id, value: !plan.isFavorite })}>

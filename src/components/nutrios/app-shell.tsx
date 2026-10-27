@@ -1,9 +1,11 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Building2,
+  Check,
   Home,
   LogOut,
   Moon,
+  Pencil,
   ShieldCheck,
   Star,
   Sun,
@@ -11,10 +13,18 @@ import {
   WandSparkles,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { ConsultationHome } from "@/components/nutrios/consultation-home";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/lib/nutrios/use-session";
+
+function getDisplayName(metadata: Record<string, unknown> | undefined, email: string) {
+  const raw = metadata?.["full_name"] ?? metadata?.["name"];
+  if (typeof raw === "string" && raw.trim()) return raw.trim();
+  return email;
+}
 
 type NavEntry = { to: string; label: string; shortLabel: string; icon: ReactNode; exact?: boolean };
 
@@ -57,6 +67,9 @@ export function AppShell({
   hideHomeDashboard?: boolean;
 }) {
   const [dark, setDark] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [savingName, setSavingName] = useState(false);
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const search = useRouterState({ select: (state) => state.location.searchStr });
@@ -89,13 +102,30 @@ export function AppShell({
     void navigate({ to: "/entrar" });
   };
 
+  const saveName = async () => {
+    const value = nameDraft.trim();
+    if (!value) return;
+    setSavingName(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ data: { full_name: value } });
+      if (error) throw error;
+      setEditingName(false);
+      toast.success("Nome atualizado.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível atualizar o nome.");
+    } finally {
+      setSavingName(false);
+    }
+  };
+
   if (loading || !session) return null;
 
   const current = `${pathname}${search ? (search.startsWith("?") ? search : `?${search}`) : ""}`;
   const isActive = (entry: NavEntry) =>
     entry.exact ? current === entry.to : current.startsWith(entry.to);
   const email = session.user.email ?? "";
-  const initials = email.slice(0, 2).toLocaleUpperCase("pt-BR");
+  const displayName = getDisplayName(session.user.user_metadata, email);
+  const initials = displayName.slice(0, 2).toLocaleUpperCase("pt-BR");
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
@@ -140,9 +170,44 @@ export function AppShell({
             <span className="grid size-8 shrink-0 place-items-center rounded-full bg-sidebar-primary text-[11px] font-semibold text-sidebar-primary-foreground">
               {initials}
             </span>
-            <span className="min-w-0 truncate text-[11px] text-sidebar-foreground/75" title={email}>
-              {email}
-            </span>
+            {editingName ? (
+              <div className="flex min-w-0 flex-1 items-center gap-1">
+                <Input
+                  autoFocus
+                  value={nameDraft}
+                  onChange={(event) => setNameDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void saveName();
+                    if (event.key === "Escape") setEditingName(false);
+                  }}
+                  className="h-7 text-[11px]"
+                  placeholder="Seu nome"
+                />
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="size-7 shrink-0"
+                  disabled={savingName || !nameDraft.trim()}
+                  aria-label="Salvar nome"
+                  onClick={() => void saveName()}
+                >
+                  <Check className="size-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className="group flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+                title={email}
+                onClick={() => {
+                  setNameDraft(displayName === email ? "" : displayName);
+                  setEditingName(true);
+                }}
+              >
+                <span className="min-w-0 truncate text-[11px] text-sidebar-foreground/75">{displayName}</span>
+                <Pencil className="size-3 shrink-0 text-sidebar-foreground/40 opacity-0 group-hover:opacity-100" />
+              </button>
+            )}
           </div>
           <div className="space-y-1">
             <Button
