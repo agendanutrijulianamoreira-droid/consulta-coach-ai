@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { extractLabsFromFile, extractLabsFromText } from "@/modules/exames/application/lab-extraction.functions";
 import { calculateDerivedLabResults, canonicalAnalyteCode, type LabPatientContext, type LabResultValue } from "@/modules/exames/domain/lab-calculations";
 import * as labs from "@/modules/exames/infrastructure/labs-repository";
+import { describeAiError } from "@/lib/nutrios/ai-error";
 
 interface Props {
   consultationId: string;
@@ -219,10 +220,6 @@ function formatDate(value: string) { if (!value) return "—"; const date = new 
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : "Não foi possível concluir a operação."; }
 /** Leitura automática depende da IA do servidor; quando ela falta, sugere o caminho manual que já funciona. */
 function extractionErrorMessage(error: unknown) {
-  const message = errorMessage(error);
-  if (message.includes("não está configurada no servidor")) {
-    return "Leitura automática indisponível neste ambiente. Use \"Entrada rápida\" para digitar os resultados manualmente.";
-  }
-  return message;
+  return describeAiError(error, "Use \"Entrada rápida\" para digitar os resultados manualmente.");
 }
 function fileToBase64(file: File) { return new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onerror = () => reject(new Error("Não foi possível ler o arquivo.")); reader.onload = () => { const dataUrl = String(reader.result ?? ""); const comma = dataUrl.indexOf(","); if (comma < 0) reject(new Error("Arquivo inválido.")); else resolve(dataUrl.slice(comma + 1)); }; reader.readAsDataURL(file); }); }

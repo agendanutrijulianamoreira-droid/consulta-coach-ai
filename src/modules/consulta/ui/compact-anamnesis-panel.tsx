@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import * as db from "@/lib/nutrios/repository";
+import { describeAiError } from "@/lib/nutrios/ai-error";
 import {
   archiveAnamnesisVersion,
   listAnamnesisVersions,
@@ -96,7 +97,7 @@ export function CompactAnamnesisPanel({
       await db.saveAnamnesis(consultationId, next);
       if (!silent) toast.success("Anamnese atualizada a partir da conversa.");
     } catch (error) {
-      if (!silent) toast.error(error instanceof Error ? error.message : "Não foi possível organizar a anamnese.");
+      if (!silent) toast.error(describeAiError(error, "Preencha os campos manualmente enquanto isso."));
     } finally {
       setExtracting(false);
     }
