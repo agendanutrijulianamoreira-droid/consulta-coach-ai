@@ -114,7 +114,11 @@ export function ConsultationHome() {
     const items: AttentionItem[] = [];
 
     for (const consultation of consultations.data ?? []) {
-      if (consultation.record_kind !== "attendance" || consultation.status === "finalizada") {
+      if (
+        consultation.record_kind !== "attendance" ||
+        consultation.status === "finalizada" ||
+        !consultation.visible_in_history
+      ) {
         continue;
       }
 
@@ -173,6 +177,18 @@ export function ConsultationHome() {
     session?.user.user_metadata["full_name"] ?? session?.user.user_metadata["name"],
     session?.user.email,
   );
+
+  const dismissAttention = useMutation({
+    mutationFn: (item: AttentionItem) => db.hideConsultationFromHistory(item.consultationId!),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["consultations"] }),
+        queryClient.invalidateQueries({ queryKey: ["consultation-dates"] }),
+      ]);
+      toast.success("Consulta arquivada e removida da Atenção clínica.");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
 
   const startConsultation = useMutation({
     mutationFn: ({
@@ -261,6 +277,8 @@ export function ConsultationHome() {
               section: item.section,
             })
           }
+          onDismiss={(item) => dismissAttention.mutate(item)}
+          dismissingId={dismissAttention.isPending ? dismissAttention.variables?.id ?? null : null}
         />
 
         <PatientQuickAccess

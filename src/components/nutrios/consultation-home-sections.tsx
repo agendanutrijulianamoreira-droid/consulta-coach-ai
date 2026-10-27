@@ -2,6 +2,7 @@ import type { ReactNode, RefObject } from "react";
 import {
   ArrowRight,
   AlertTriangle,
+  Archive,
   Cake,
   CalendarDays,
   CalendarRange,
@@ -203,10 +204,14 @@ function MetricCard({
 export function AttentionCenter({
   items,
   onOpen,
+  onDismiss,
+  dismissingId,
   isLoading = false,
 }: {
   items: AttentionItem[];
   onOpen: (item: AttentionItem) => void;
+  onDismiss?: (item: AttentionItem) => void;
+  dismissingId?: string | null;
   isLoading?: boolean;
 }) {
   return (
@@ -257,15 +262,30 @@ export function AttentionCenter({
                     {item.patient.name} · {item.detail}
                   </p>
                 </div>
-                <Button
-                  type="button"
-                  variant={item.tone === "urgent" ? "destructive" : "outline"}
-                  size="sm"
-                  className="min-h-10 shrink-0"
-                  onClick={() => onOpen(item)}
-                >
-                  {item.actionLabel} <ArrowRight />
-                </Button>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {onDismiss && item.consultationId ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="min-h-10"
+                      disabled={dismissingId === item.id}
+                      title="Arquivar: tira esta consulta da Atenção clínica e do histórico, sem apagar nenhum dado clínico"
+                      onClick={() => onDismiss(item)}
+                    >
+                      <Archive /> {dismissingId === item.id ? "Arquivando…" : "Arquivar"}
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant={item.tone === "urgent" ? "destructive" : "outline"}
+                    size="sm"
+                    className="min-h-10"
+                    onClick={() => onOpen(item)}
+                  >
+                    {item.actionLabel} <ArrowRight />
+                  </Button>
+                </div>
               </div>
             );
           })}
