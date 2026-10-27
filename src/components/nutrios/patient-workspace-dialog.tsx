@@ -61,9 +61,14 @@ const CLINICAL_SECTIONS = new Set<WorkspaceSection>([
   "parecer",
 ]);
 
+/**
+ * "Parecer" nunca entra aqui: não existe etapa própria para ele dentro de
+ * ConsultationWorkspace, e abri-lo é sempre uma navegação para /parecer/$id
+ * (ver clinical-module-section.tsx), que já tem a tela completa de geração.
+ */
 const WORKSPACE_STEPS: Partial<Record<WorkspaceSection, number>> = {
   consulta: 0, anamnese: 1, antropometria: 2, calculos: 3, recordatorio: 4,
-  exames: 5, diagnostico: 6, plano: 7, parecer: 7,
+  exames: 5, diagnostico: 6, plano: 7,
 };
 
 export function PatientWorkspaceDialog({
@@ -116,6 +121,13 @@ export function PatientWorkspaceDialog({
   }, [open, patientId, initialConsultationId, initialSection]);
 
   const selectSection = (next: WorkspaceSection) => {
+    // Parecer não tem etapa própria dentro de ConsultationWorkspace: com uma
+    // consulta já aberta, ir direto para o parecer dela em vez de cair na
+    // etapa 0 (fallback de WORKSPACE_STEPS para uma seção sem mapeamento).
+    if (next === "parecer" && consultationId) {
+      window.location.href = `/parecer/${consultationId}`;
+      return;
+    }
     setSection(next);
   };
 

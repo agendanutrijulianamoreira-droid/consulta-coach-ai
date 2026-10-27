@@ -85,7 +85,13 @@ export async function getClinicalModuleHistory(patientId: string): Promise<Clini
   for (const row of records.data ?? []) {
     const sections = (row.sections ?? {}) as Record<string, unknown>;
     favoriteByConsultation[row.consultation_id] = sections[FAVORITE_SECTION_KEY] === "true";
-    if (row.report) empty.reports[row.consultation_id] = row.report;
+    if (row.report) {
+      empty.reports[row.consultation_id] = row.report;
+    } else if (typeof sections["parecer"] === "string" && sections["parecer"]) {
+      // Gerado pela tela /parecer/$id (ParecerDocument estruturado em JSON,
+      // não markdown): só sinaliza existência para a listagem de pareceres.
+      empty.reports[row.consultation_id] = "Parecer estruturado disponível.";
+    }
   }
   for (const row of segments.data ?? []) {
     empty.transcriptCount[row.consultation_id] = (empty.transcriptCount[row.consultation_id] ?? 0) + 1;

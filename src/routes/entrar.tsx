@@ -86,9 +86,14 @@ function LoginPage() {
     void navigate({ to: "/" });
   };
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, name?: string) => {
     setBusy(true);
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const fullName = name?.trim();
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      ...(fullName ? { options: { data: { full_name: fullName } } } : {}),
+    });
     setBusy(false);
     if (error) {
       toast.error(error.message);
@@ -152,6 +157,7 @@ function LoginPage() {
                 icon={<UserPlus />}
                 onSubmit={signUp}
                 minPasswordLength={8}
+                showName
               />
             </TabsContent>
           </Tabs>
@@ -167,13 +173,16 @@ function AuthForm({
   icon,
   onSubmit,
   minPasswordLength = 6,
+  showName = false,
 }: {
   busy: boolean;
   submitLabel: string;
   icon: React.ReactNode;
-  onSubmit: (email: string, password: string) => Promise<void>;
+  onSubmit: (email: string, password: string, name?: string) => Promise<void>;
   minPasswordLength?: number;
+  showName?: boolean;
 }) {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -182,9 +191,24 @@ function AuthForm({
       className="grid gap-4"
       onSubmit={(event) => {
         event.preventDefault();
-        void onSubmit(email.trim(), password);
+        void onSubmit(email.trim(), password, showName ? name.trim() : undefined);
       }}
     >
+      {showName ? (
+        <div className="grid gap-1.5">
+          <Label htmlFor="auth-name" className="text-xs text-muted-foreground">
+            Seu nome
+          </Label>
+          <Input
+            id="auth-name"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoComplete="name"
+            placeholder="Como quer ser chamada no app"
+          />
+        </div>
+      ) : null}
       <div className="grid gap-1.5">
         <Label htmlFor="auth-email" className="text-xs text-muted-foreground">
           E-mail
@@ -212,7 +236,10 @@ function AuthForm({
           autoComplete="current-password"
         />
       </div>
-      <Button type="submit" disabled={busy || !email.trim() || password.length < minPasswordLength}>
+      <Button
+        type="submit"
+        disabled={busy || !email.trim() || password.length < minPasswordLength || (showName && !name.trim())}
+      >
         {icon} {busy ? "Aguarde…" : submitLabel}
       </Button>
     </form>
