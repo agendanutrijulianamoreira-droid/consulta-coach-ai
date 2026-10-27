@@ -24,6 +24,7 @@ import { buildMealPlan, defaultMacros, recalculatePlan, scaleItem } from "@/modu
 import { blobToBase64, startRecording, type AudioRecorder } from "@/modules/transcricao/recorder";
 import { countPendingAudioWindows, listPendingAudioWindows, markPendingAudioAttempt, removePendingAudioWindow, savePendingAudioWindow, type PendingAudioWindow } from "@/modules/transcricao/pending-queue";
 import * as db from "@/lib/nutrios/repository";
+import { describeAiError } from "@/lib/nutrios/ai-error";
 import { describeMealPlan, generateClinicalSummary, generateReport, interpretAnthropometry, transcribeChunk } from "@/lib/nutrios/ai.functions";
 import { MEAL_SLOT_LABELS, RESTRICTION_OPTIONS, type AnamnesisFields, type Food, type MealPlan, type RecallItem } from "@/lib/nutrios/types";
 
@@ -69,6 +70,7 @@ export function ConsultationWorkspace({
   const secondsRef = useRef(0);
   const transcriptRef = useRef("");
   const syncingRef = useRef(false);
+  const transcriptionErrorShownRef = useRef(false);
   const transcribe = useServerFn(transcribeChunk);
   const consultation = useQuery({ queryKey: ["consultation", id], queryFn: () => db.getConsultation(id) });
   const segments = useQuery({ queryKey: ["segments", id], queryFn: () => db.listSegments(id), refetchInterval: recording ? 4000 : false });
@@ -192,7 +194,13 @@ export function ConsultationWorkspace({
       await removePendingAudioWindow(windowItem.id);
       await queryClient.invalidateQueries({ queryKey: ["segments", id] });
       return true;
-    } catch { return false; }
+    } catch (error) {
+      if (!transcriptionErrorShownRef.current) {
+        transcriptionErrorShownRef.current = true;
+        toast.error(describeAiError(error, "A gravação continua salva neste aparelho; a transcrição e a anamnese automática ficam pausadas até a IA voltar."));
+      }
+      return false;
+    }
     finally { setProcessingCount((value) => Math.max(0, value - 1)); void refreshPendingCount(); }
   }, [id, queryClient, refreshPendingCount, transcribe]);
 
@@ -241,6 +249,7 @@ export function ConsultationWorkspace({
         toast.success("Gravação encerrada. A transcrição será usada para atualizar a anamnese automaticamente."); return;
       }
       if (!navigator.mediaDevices?.getUserMedia) { toast.error("Este navegador não disponibiliza acesso ao microfone. Use uma versão atualizada do Chrome, Edge ou Safari."); return; }
+      transcriptionErrorShownRef.current = false;
       recorder.current = await startRecording(handleWindow, 6000, secondsRef.current); setRecording(true);
       await db.updateConsultation(id, { status: "em_andamento", started_at: consultation.data?.started_at ?? new Date().toISOString(), ended_at: null });
       await queryClient.invalidateQueries({ queryKey: ["consultation", id] });
