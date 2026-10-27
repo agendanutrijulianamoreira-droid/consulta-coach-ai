@@ -92,7 +92,7 @@ function LoginPage() {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: fullName ? { data: { full_name: fullName } } : undefined,
+      ...(fullName ? { options: { data: { full_name: fullName } } } : {}),
     });
     setBusy(false);
     if (error) {
