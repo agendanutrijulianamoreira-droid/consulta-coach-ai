@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import {
   AttentionCenter,
@@ -19,6 +20,15 @@ import {
 } from "@/components/nutrios/patient-workspace-dialog";
 import { useSession } from "@/lib/nutrios/use-session";
 import * as db from "@/lib/nutrios/repository";
+import * as agendaDb from "@/modules/agenda/infrastructure/agenda-repository";
+import {
+  tasksFromBirthdays,
+  tasksFromNoShowAppointments,
+  tasksFromOpenConsultations,
+  sortAndCap,
+  type TarefaTipo,
+} from "@/modules/ia-gerente/domain/fila";
+import * as tarefasDb from "@/modules/ia-gerente/infrastructure/tarefas-repository";
 
 type WorkspaceState = {
   patientId: string;
@@ -39,6 +49,7 @@ function focusConsultationSearch(
 
 export function ConsultationHome() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const searchAreaRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const { session } = useSession();
@@ -55,6 +66,11 @@ export function ConsultationHome() {
     queryKey: ["consultation-dates"],
     queryFn: db.listConsultationDates,
   });
+  const appointmentsForTasks = useQuery({
+    queryKey: ["appointments-for-tasks"],
+    queryFn: agendaDb.listAllAppointmentsForTasks,
+  });
+  const tarefas = useQuery({ queryKey: ["tarefas-gerente"], queryFn: tarefasDb.listOpenTarefas });
 
   const latestByPatient = useMemo(() => {
     const latest = new Map<string, { id: string; date: string }>();
@@ -109,57 +125,51 @@ export function ConsultationHome() {
     ).length;
   }, [patients.data]);
 
+  // Regras fixas (nunca a IA) recalculam os candidatos sempre que os dados
+  // de origem mudam; a fila de verdade mora em tarefas_gerente, para
+  // "adiar"/"descartar" serem lembrados entre sessões.
+  useEffect(() => {
+    if (!patients.data || !consultations.data || !appointmentsForTasks.data) return;
+    const candidates = sortAndCap([
+      ...tasksFromOpenConsultations(consultations.data, patients.data),
+      ...tasksFromNoShowAppointments(appointmentsForTasks.data, patients.data),
+      ...tasksFromBirthdays(patients.data),
+    ]);
+    void tarefasDb.syncTarefas(candidates).then(() => {
+      void queryClient.invalidateQueries({ queryKey: ["tarefas-gerente"] });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patients.data, consultations.data, appointmentsForTasks.data]);
+
   const attentionItems = useMemo<AttentionItem[]>(() => {
     const patientById = new Map((patients.data ?? []).map((patient) => [patient.id, patient]));
-    const items: AttentionItem[] = [];
-
-    for (const consultation of consultations.data ?? []) {
-      if (
-        consultation.record_kind !== "attendance" ||
-        consultation.status === "finalizada" ||
-        !consultation.visible_in_history
-      ) {
-        continue;
-      }
-
-      const patient = patientById.get(consultation.patient_id);
-      if (!patient) continue;
-
-      const isInProgress = consultation.status === "em_andamento";
-      items.push({
-        id: `consultation-${consultation.id}`,
-        patient,
-        consultationId: consultation.id,
-        title: isInProgress ? "Consulta em andamento" : "Consulta não finalizada",
-        detail: consultation.current_step
-          ? `Etapa: ${formatStep(consultation.current_step)}`
-          : "Revisar prontuário",
-        actionLabel: "Abrir consulta",
-        section: "consulta",
-        tone: isInProgress ? "urgent" : "attention",
-      });
-
-      if (items.length >= 4) break;
-    }
-
-    const currentMonth = new Date().getMonth() + 1;
-    const birthdayPatient = (patients.data ?? []).find(
-      (patient) => getBirthDateParts(patient.birth_date)?.month === currentMonth,
-    );
-    if (birthdayPatient) {
-      items.push({
-        id: `birthday-${birthdayPatient.id}`,
-        patient: birthdayPatient,
-        title: "Aniversariante do mês",
-        detail: "Considerar um contato de relacionamento",
-        actionLabel: "Abrir paciente",
-        section: "perfil",
-        tone: "informative",
-      });
-    }
-
-    return items.slice(0, 5);
-  }, [consultations.data, patients.data]);
+    const TONE_BY_TIPO: Record<TarefaTipo, AttentionItem["tone"]> = {
+      consulta_aberta: "attention",
+      falta_sem_remarcar: "urgent",
+      aniversario: "informative",
+    };
+    const SECTION_BY_TIPO: Record<TarefaTipo, AttentionItem["section"]> = {
+      consulta_aberta: "consulta",
+      falta_sem_remarcar: "agenda",
+      aniversario: "perfil",
+    };
+    return (tarefas.data ?? []).flatMap((tarefa) => {
+      const patient = tarefa.patientId ? patientById.get(tarefa.patientId) : undefined;
+      if (!patient) return [];
+      return [
+        {
+          id: tarefa.id,
+          patient,
+          consultationId: tarefa.consultationId,
+          title: tarefa.titulo,
+          detail: tarefa.motivo,
+          actionLabel: tarefa.actionLabel,
+          section: SECTION_BY_TIPO[tarefa.tipo],
+          tone: TONE_BY_TIPO[tarefa.tipo],
+        },
+      ];
+    });
+  }, [tarefas.data, patients.data]);
 
   const consultationStats = useMemo(
     () => summarizeConsultations(consultationDates.data ?? []),
@@ -179,13 +189,20 @@ export function ConsultationHome() {
   );
 
   const dismissAttention = useMutation({
-    mutationFn: (item: AttentionItem) => db.hideConsultationFromHistory(item.consultationId!),
+    mutationFn: (item: AttentionItem) => tarefasDb.descartarTarefa(item.id),
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["consultations"] }),
-        queryClient.invalidateQueries({ queryKey: ["consultation-dates"] }),
-      ]);
-      toast.success("Consulta arquivada e removida da Atenção clínica.");
+      await queryClient.invalidateQueries({ queryKey: ["tarefas-gerente"] });
+      toast.success("Removida da fila.");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const snoozeAttention = useMutation({
+    mutationFn: (item: AttentionItem) =>
+      tarefasDb.adiarTarefa(item.id, new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["tarefas-gerente"] });
+      toast.success("Adiada para amanhã.");
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -269,16 +286,27 @@ export function ConsultationHome() {
 
         <AttentionCenter
           items={attentionItems}
-          isLoading={patients.isLoading || consultations.isLoading}
-          onOpen={(item) =>
+          isLoading={patients.isLoading || consultations.isLoading || tarefas.isLoading}
+          onOpen={(item) => {
+            if (item.section === "agenda") {
+              void navigate({ to: "/agenda" });
+              return;
+            }
             setWorkspace({
               patientId: item.patient.id,
-              consultationId: item.consultationId,
+              consultationId: item.consultationId ?? undefined,
               section: item.section,
-            })
-          }
+            });
+          }}
+          onSnooze={(item) => snoozeAttention.mutate(item)}
           onDismiss={(item) => dismissAttention.mutate(item)}
-          dismissingId={dismissAttention.isPending ? dismissAttention.variables?.id ?? null : null}
+          pendingId={
+            dismissAttention.isPending
+              ? (dismissAttention.variables?.id ?? null)
+              : snoozeAttention.isPending
+                ? (snoozeAttention.variables?.id ?? null)
+                : null
+          }
         />
 
         <PatientQuickAccess
@@ -320,7 +348,11 @@ export function ConsultationHome() {
         }}
         onConfirm={(consultationDate, observations) => {
           if (consultationPatient) {
-            startConsultation.mutate({ patientId: consultationPatient.id, consultationDate, observations });
+            startConsultation.mutate({
+              patientId: consultationPatient.id,
+              consultationDate,
+              observations,
+            });
           }
         }}
         onDecline={() => {
@@ -391,21 +423,6 @@ function getBirthDateParts(value: string | null) {
   const [, month, day] = value.slice(0, 10).split("-").map(Number);
   if (!month || !day) return null;
   return { month, day };
-}
-
-function formatStep(value: string) {
-  const labels: Record<string, string> = {
-    consulta: "consulta",
-    anamnese: "anamnese",
-    antropometria: "antropometria",
-    calculos: "cálculos",
-    recordatorio: "recordatório",
-    exames: "exames",
-    diagnostico: "diagnóstico",
-    plano: "plano alimentar",
-    parecer: "parecer",
-  };
-  return labels[value] ?? value.replaceAll("_", " ");
 }
 
 function formatToday() {

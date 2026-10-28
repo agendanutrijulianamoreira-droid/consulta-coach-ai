@@ -33,11 +33,11 @@ export type PatientView = "recent" | "birthdays";
 export type AttentionItem = {
   id: string;
   patient: Patient;
-  consultationId?: string;
+  consultationId?: string | null;
   title: string;
   detail: string;
   actionLabel: string;
-  section: "perfil" | "consulta";
+  section: "perfil" | "consulta" | "agenda";
   tone: "urgent" | "attention" | "informative";
 };
 
@@ -204,23 +204,25 @@ function MetricCard({
 export function AttentionCenter({
   items,
   onOpen,
+  onSnooze,
   onDismiss,
-  dismissingId,
+  pendingId,
   isLoading = false,
 }: {
   items: AttentionItem[];
   onOpen: (item: AttentionItem) => void;
+  onSnooze?: (item: AttentionItem) => void;
   onDismiss?: (item: AttentionItem) => void;
-  dismissingId?: string | null;
+  pendingId?: string | null;
   isLoading?: boolean;
 }) {
   return (
     <Card className="cach-panel mt-5 overflow-hidden">
       <div className="flex flex-col gap-2 border-b border-border px-4 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-5">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">Atenção clínica</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Fila de aprovações</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            O que merece uma ação antes de encerrar o dia.
+            O que merece uma ação antes de encerrar o dia, em ordem de prioridade.
           </p>
         </div>
         <span className="text-xs text-muted-foreground" aria-live="polite">
@@ -240,11 +242,7 @@ export function AttentionCenter({
         <div className="divide-y divide-border">
           {items.map((item) => {
             const Icon =
-              item.tone === "urgent"
-                ? AlertTriangle
-                : item.tone === "attention"
-                  ? FileText
-                  : Cake;
+              item.tone === "urgent" ? AlertTriangle : item.tone === "attention" ? FileText : Cake;
             const toneClass = {
               urgent: "bg-destructive/10 text-destructive",
               attention: "bg-sand-soft text-sand-ink",
@@ -252,8 +250,13 @@ export function AttentionCenter({
             }[item.tone];
 
             return (
-              <div key={item.id} className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:px-5">
-                <span className={`flex size-9 shrink-0 items-center justify-center rounded-full ${toneClass}`}>
+              <div
+                key={item.id}
+                className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:px-5"
+              >
+                <span
+                  className={`flex size-9 shrink-0 items-center justify-center rounded-full ${toneClass}`}
+                >
                   <Icon className="size-4" />
                 </span>
                 <div className="min-w-0 flex-1">
@@ -263,17 +266,30 @@ export function AttentionCenter({
                   </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  {onDismiss && item.consultationId ? (
+                  {onSnooze ? (
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
                       className="min-h-10"
-                      disabled={dismissingId === item.id}
-                      title="Arquivar: tira esta consulta da Atenção clínica e do histórico, sem apagar nenhum dado clínico"
+                      disabled={pendingId === item.id}
+                      title="Adiar: volta a aparecer amanhã"
+                      onClick={() => onSnooze(item)}
+                    >
+                      <Clock3 /> Adiar
+                    </Button>
+                  ) : null}
+                  {onDismiss ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="min-h-10"
+                      disabled={pendingId === item.id}
+                      title="Descartar: tira da fila sem alterar nenhum dado clínico"
                       onClick={() => onDismiss(item)}
                     >
-                      <Archive /> {dismissingId === item.id ? "Arquivando…" : "Arquivar"}
+                      <Archive /> Descartar
                     </Button>
                   ) : null}
                   <Button
