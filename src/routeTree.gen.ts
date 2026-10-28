@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AlimentosRouteImport } from './routes/alimentos'
 import { Route as ConsultorioRouteImport } from './routes/consultorio'
+import { Route as AgendaRouteImport } from './routes/agenda'
 import { Route as EntrarRouteImport } from './routes/entrar'
 import { Route as McpRouteImport } from './routes/mcp'
 import { Route as ReceitasRouteImport } from './routes/receitas'
@@ -36,6 +37,11 @@ const AlimentosRoute = AlimentosRouteImport.update({
 const ConsultorioRoute = ConsultorioRouteImport.update({
   id: '/consultorio',
   path: '/consultorio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgendaRoute = AgendaRouteImport.update({
+  id: '/agenda',
+  path: '/agenda',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EntrarRoute = EntrarRouteImport.update({
@@ -95,6 +101,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/alimentos': typeof AlimentosRoute
   '/consultorio': typeof ConsultorioRouteWithChildren
+  '/agenda': typeof AgendaRoute
   '/entrar': typeof EntrarRoute
   '/mcp': typeof McpRoute
   '/receitas': typeof ReceitasRoute
@@ -110,6 +117,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/alimentos': typeof AlimentosRoute
   '/consultorio': typeof ConsultorioRouteWithChildren
+  '/agenda': typeof AgendaRoute
   '/entrar': typeof EntrarRoute
   '/mcp': typeof McpRoute
   '/receitas': typeof ReceitasRoute
@@ -126,6 +134,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/alimentos': typeof AlimentosRoute
   '/consultorio': typeof ConsultorioRouteWithChildren
+  '/agenda': typeof AgendaRoute
   '/entrar': typeof EntrarRoute
   '/mcp': typeof McpRoute
   '/receitas': typeof ReceitasRoute
@@ -143,6 +152,7 @@ export interface FileRouteTypes {
     | '/'
     | '/alimentos'
     | '/consultorio'
+    | '/agenda'
     | '/entrar'
     | '/mcp'
     | '/receitas'
@@ -158,6 +168,7 @@ export interface FileRouteTypes {
     | '/'
     | '/alimentos'
     | '/consultorio'
+    | '/agenda'
     | '/entrar'
     | '/mcp'
     | '/receitas'
@@ -173,6 +184,7 @@ export interface FileRouteTypes {
     | '/'
     | '/alimentos'
     | '/consultorio'
+    | '/agenda'
     | '/entrar'
     | '/mcp'
     | '/receitas'
@@ -189,6 +201,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AlimentosRoute: typeof AlimentosRoute
   ConsultorioRoute: typeof ConsultorioRouteWithChildren
+  AgendaRoute: typeof AgendaRoute
   EntrarRoute: typeof EntrarRoute
   McpRoute: typeof McpRoute
   ReceitasRoute: typeof ReceitasRoute
@@ -221,6 +234,13 @@ declare module '@tanstack/react-router' {
       path: '/consultorio'
       fullPath: '/consultorio'
       preLoaderRoute: typeof ConsultorioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agenda': {
+      id: '/agenda'
+      path: '/agenda'
+      fullPath: '/agenda'
+      preLoaderRoute: typeof AgendaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/entrar': {
@@ -312,6 +332,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AlimentosRoute: AlimentosRoute,
   ConsultorioRoute: ConsultorioRouteWithChildren,
+  AgendaRoute: AgendaRoute,
   EntrarRoute: EntrarRoute,
   McpRoute: McpRoute,
   ReceitasRoute: ReceitasRoute,

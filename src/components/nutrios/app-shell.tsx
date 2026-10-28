@@ -1,6 +1,7 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   Building2,
+  CalendarDays,
   Check,
   Home,
   LogOut,
@@ -35,6 +36,12 @@ const NAV_ENTRIES: NavEntry[] = [
     shortLabel: "Início",
     icon: <Home className="size-4" />,
     exact: true,
+  },
+  {
+    to: "/agenda",
+    label: "Agenda",
+    shortLabel: "Agenda",
+    icon: <CalendarDays className="size-4" />,
   },
   {
     to: "/?patients=all",
@@ -204,7 +211,9 @@ export function AppShell({
                   setEditingName(true);
                 }}
               >
-                <span className="min-w-0 truncate text-[11px] text-sidebar-foreground/75">{displayName}</span>
+                <span className="min-w-0 truncate text-[11px] text-sidebar-foreground/75">
+                  {displayName}
+                </span>
                 <Pencil className="size-3 shrink-0 text-sidebar-foreground/40 opacity-0 group-hover:opacity-100" />
               </button>
             )}
