@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { extractResponseText } from "@/modules/exames/application/lab-extraction-response";
+import { registrarAcao } from "@/modules/ia-gerente/infrastructure/acoes-repository";
 
 const ENDPOINT = "https://ai.gateway.lovable.dev/v1/responses";
 const MODEL = "openai/gpt-5.6-sol";
@@ -78,7 +79,7 @@ export const gerarResumoDia = createServerFn({ method: "POST" })
       })
       .parse(input),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     if (!data.tarefas.length) {
       return {
         resumo: "Nenhuma pendência na fila agora — tudo em dia.",
@@ -107,6 +108,11 @@ export const gerarResumoDia = createServerFn({ method: "POST" })
           typeof (item as { origem?: unknown }).origem === "string",
       )
       .map((item) => ({ texto: item.texto, origem: item.origem }));
+    await registrarAcao(context.supabase, {
+      agente: "resumo_diario",
+      entrada: data.tarefas,
+      saida: { resumo: result.resumo, pontos },
+    });
     return { resumo: result.resumo, pontos };
   });
 
@@ -122,7 +128,7 @@ export const gerarRascunhoMensagem = createServerFn({ method: "POST" })
       })
       .parse(input),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const userText = `Paciente: ${data.pacienteNome}\nTipo da situação: ${data.tipo}\nTítulo: ${data.titulo}\nMotivo: ${data.motivo}`;
     const payload = await callLovableAi(
       mensagemInstructions,
@@ -134,7 +140,12 @@ export const gerarRascunhoMensagem = createServerFn({ method: "POST" })
     if (typeof result.mensagem !== "string") {
       throw new Error("A IA respondeu em um formato inesperado ao gerar o rascunho da mensagem.");
     }
-    return { mensagem: result.mensagem };
+    const acaoId = await registrarAcao(context.supabase, {
+      agente: "mensagem_whatsapp",
+      entrada: data,
+      saida: { mensagem: result.mensagem },
+    });
+    return { mensagem: result.mensagem, acaoId };
   });
 
 async function callLovableAi(

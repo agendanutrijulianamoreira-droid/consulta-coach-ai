@@ -6,11 +6,14 @@ import {
   BarChart3,
   BookOpen,
   Building2,
+  Check,
   CheckCircle2,
   CalendarDays,
   ChevronRight,
   CirclePlus,
+  Clock3,
   Layers3,
+  MessageCircle,
   PackageSearch,
   Plus,
   Save,
@@ -42,6 +45,10 @@ import {
   materialCategoryLabel,
   type FavoriteMaterial,
 } from "@/modules/favoritos/material-store";
+import {
+  listAcoesRecentes,
+  type AcaoAgente,
+} from "@/modules/ia-gerente/infrastructure/acoes-repository";
 import { StructuredOffice } from "@/modules/sprint/ui/structured-office";
 
 export const Route = createFileRoute("/consultorio")({
@@ -49,7 +56,7 @@ export const Route = createFileRoute("/consultorio")({
   component: ClinicOfficePage,
 });
 
-type OfficeTab = "metodo" | "relatorios" | "estruturado" | "produtos" | "financeiro";
+type OfficeTab = "metodo" | "relatorios" | "historico" | "estruturado" | "produtos" | "financeiro";
 
 const officeSections: Array<{
   id: OfficeTab;
@@ -77,6 +84,13 @@ const officeSections: Array<{
     title: "Relatório de consultas",
     description: "Volume, pacientes atendidos e observações.",
     icon: BarChart3,
+    available: true,
+  },
+  {
+    id: "historico",
+    title: "Histórico da IA Gerente",
+    description: "Resumos e rascunhos gerados, e o que foi aprovado.",
+    icon: Sparkles,
     available: true,
   },
   {
@@ -173,6 +187,8 @@ function ClinicOfficePage() {
                 <MethodWorkspace />
               ) : tab === "relatorios" ? (
                 <ConsultationReport />
+              ) : tab === "historico" ? (
+                <AiHistoryPanel />
               ) : tab === "estruturado" ? (
                 <StructuredOffice />
               ) : (
@@ -897,6 +913,98 @@ function ConsultationReport() {
   );
 }
 
+const AGENTE_LABEL: Record<AcaoAgente["agente"], string> = {
+  resumo_diario: "Resumo do dia",
+  mensagem_whatsapp: "Rascunho de WhatsApp",
+};
+
+/**
+ * Entrega 5 da IA Gerente: toda vez que a IA gera um rascunho (resumo ou
+ * mensagem), fica registrado aqui — o que entrou, o que saiu, e se a
+ * profissional de fato usou (aprovou, ao copiar a mensagem).
+ */
+function AiHistoryPanel() {
+  const historico = useQuery({ queryKey: ["acoes-agente"], queryFn: () => listAcoesRecentes() });
+  const rows = historico.data ?? [];
+  const aprovadas = rows.filter((row) => row.status === "aprovado").length;
+
+  return (
+    <div className="space-y-5">
+      <section className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+        <div className="border-b border-border px-5 py-5 sm:px-6">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <Sparkles className="size-3.5" /> Trilha de auditoria
+          </div>
+          <h2 className="mt-1.5 text-xl font-semibold tracking-tight">Histórico da IA Gerente</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Todo rascunho que a IA gera fica registrado aqui — a redação é sempre da IA, mas usar ou
+            não é sempre sua decisão.
+          </p>
+        </div>
+        <div className="grid divide-y divide-border sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+          <ReportMetric icon={<Sparkles />} label="Rascunhos gerados" value={rows.length} />
+          <ReportMetric icon={<Check />} label="Usados (copiados)" value={aprovadas} />
+        </div>
+      </section>
+      <section className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+        <div className="border-b border-border px-5 py-4 sm:px-6">
+          <h3 className="text-sm font-semibold">Ações recentes</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            As 30 ações mais recentes da IA Gerente.
+          </p>
+        </div>
+        {historico.isLoading ? (
+          <p className="px-6 py-10 text-sm text-muted-foreground">Carregando histórico…</p>
+        ) : null}
+        {historico.isError ? (
+          <p className="px-6 py-10 text-sm text-destructive">
+            Não foi possível carregar o histórico da IA Gerente.
+          </p>
+        ) : null}
+        {!historico.isLoading && !historico.isError && !rows.length ? (
+          <p className="px-6 py-10 text-sm text-muted-foreground">
+            Nenhuma ação registrada ainda. Use "Resumo do dia" ou "Rascunho" na Fila de aprovações.
+          </p>
+        ) : null}
+        {rows.length ? (
+          <div className="divide-y divide-border">
+            {rows.map((row) => (
+              <div
+                key={row.id}
+                className="grid gap-2 px-5 py-4 sm:px-6 lg:grid-cols-[180px_160px_minmax(0,1fr)] lg:items-center"
+              >
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  {row.agente === "mensagem_whatsapp" ? (
+                    <MessageCircle className="size-3.5 text-muted-foreground" />
+                  ) : (
+                    <Sparkles className="size-3.5 text-muted-foreground" />
+                  )}
+                  {AGENTE_LABEL[row.agente]}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {formatReportDate(row.createdAt)}
+                </span>
+                <span className="flex items-center gap-1.5 text-xs font-medium">
+                  {row.status === "aprovado" ? (
+                    <>
+                      <Check className="size-3.5 text-success" /> Usado em{" "}
+                      {row.aprovadoEm ? formatReportDate(row.aprovadoEm) : ""}
+                    </>
+                  ) : (
+                    <>
+                      <Clock3 className="size-3.5 text-sand-ink" /> Gerado, ainda não usado
+                    </>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </section>
+    </div>
+  );
+}
+
 function ReportMetric({
   icon,
   label,
@@ -924,7 +1032,7 @@ function formatReportDate(value: string) {
   }).format(new Date(`${value.slice(0, 10)}T12:00:00`));
 }
 
-function ComingSoon({ tab }: { tab: Exclude<OfficeTab, "metodo" | "relatorios"> }) {
+function ComingSoon({ tab }: { tab: Exclude<OfficeTab, "metodo" | "relatorios" | "historico"> }) {
   const product = tab === "produtos";
   return (
     <div className="rounded-xl border border-border bg-background p-8 shadow-sm sm:p-10">
