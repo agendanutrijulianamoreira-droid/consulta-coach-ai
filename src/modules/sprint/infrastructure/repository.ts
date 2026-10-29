@@ -1,14 +1,44 @@
-import { supabase } from "@/integrations/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { supabase as baseSupabase } from "@/integrations/supabase/client";
 import type { Database, Json } from "@/integrations/supabase/types";
 
 type Tables = Database["public"]["Tables"];
 export type SprintProgress = Tables["sprint_progress"]["Row"];
 export type Offer = Tables["biz_offers"]["Row"];
-export type Lead = Tables["crm_leads"]["Row"];
+export type Lead = Tables["crm_leads"]["Row"] & { patient_id: string | null };
 export type LeadEvent = Tables["crm_lead_events"]["Row"];
-export type Entry = Tables["biz_entries"]["Row"];
+export type Entry = Tables["biz_entries"]["Row"] & { patient_id: string | null };
 export type Proposal = Tables["ai_proposals"]["Row"];
 export type MessageTemplate = Tables["message_templates"]["Row"];
+
+/**
+ * crm_leads e biz_entries ganharam patient_id nesta mesma leva de
+ * trabalho, mas o schema gerado do Supabase só conhece essa coluna na
+ * próxima regeneração automática — extensão local tipada até então,
+ * mesmo padrão já usado para as outras tabelas novas desta sessão.
+ */
+type FinanceTables = {
+  crm_leads: {
+    Row: Lead;
+    Insert: Tables["crm_leads"]["Insert"] & { patient_id?: string | null };
+    Update: Partial<Lead>;
+    Relationships: Tables["crm_leads"]["Relationships"];
+  };
+  biz_entries: {
+    Row: Entry;
+    Insert: Tables["biz_entries"]["Insert"] & { patient_id?: string | null };
+    Update: Partial<Entry>;
+    Relationships: Tables["biz_entries"]["Relationships"];
+  };
+};
+
+type FinanceDatabase = Omit<Database, "public"> & {
+  public: Omit<Database["public"], "Tables"> & {
+    Tables: Omit<Tables, keyof FinanceTables> & FinanceTables;
+  };
+};
+
+const supabase = baseSupabase as unknown as SupabaseClient<FinanceDatabase>;
 
 const json = (value: unknown) => value as Json;
 
@@ -80,7 +110,7 @@ export async function deleteOffer(id: string) {
 export async function listLeads() {
   return unwrap(
     await supabase.from("crm_leads").select("*").order("updated_at", { ascending: false }),
-  ) as Lead[];
+  ) as unknown as Lead[];
 }
 
 export async function createLead(input: {
@@ -90,17 +120,20 @@ export async function createLead(input: {
   source?: string;
   next_action?: string | null;
   next_action_at?: string | null;
+  patient_id?: string | null;
 }) {
-  return unwrap(await supabase.from("crm_leads").insert(input).select().single()) as Lead;
+  return unwrap(
+    await supabase.from("crm_leads").insert(input).select().single(),
+  ) as unknown as Lead;
 }
 
 export async function updateLead(id: string, input: Partial<Lead>) {
   const current = unwrap(
     await supabase.from("crm_leads").select("*").eq("id", id).single(),
-  ) as Lead;
+  ) as unknown as Lead;
   const updated = unwrap(
     await supabase.from("crm_leads").update(input).eq("id", id).select().single(),
-  ) as Lead;
+  ) as unknown as Lead;
   if (input.stage && input.stage !== current.stage) {
     await recordLeadEvent({
       lead_id: id,
@@ -139,7 +172,17 @@ export async function listLeadEvents() {
 export async function listEntries() {
   return unwrap(
     await supabase.from("biz_entries").select("*").order("entry_date", { ascending: false }),
-  ) as Entry[];
+  ) as unknown as Entry[];
+}
+
+export async function listEntriesForPatient(patientId: string) {
+  return unwrap(
+    await supabase
+      .from("biz_entries")
+      .select("*")
+      .eq("patient_id", patientId)
+      .order("entry_date", { ascending: false }),
+  ) as unknown as Entry[];
 }
 
 export async function createEntry(input: {
@@ -151,9 +194,18 @@ export async function createEntry(input: {
   is_renewal?: boolean;
   offer_id?: string | null;
   lead_id?: string | null;
+  patient_id?: string | null;
   description?: string | null;
 }) {
-  return unwrap(await supabase.from("biz_entries").insert(input).select().single()) as Entry;
+  return unwrap(
+    await supabase.from("biz_entries").insert(input).select().single(),
+  ) as unknown as Entry;
+}
+
+export async function updateEntryStatus(id: string, status: "ok" | "pendente" | "atrasado") {
+  return unwrap(
+    await supabase.from("biz_entries").update({ status }).eq("id", id).select().single(),
+  ) as unknown as Entry;
 }
 
 export async function listGoals(periodMonth: string) {

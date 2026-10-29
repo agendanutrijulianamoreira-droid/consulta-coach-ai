@@ -26,6 +26,7 @@ import { MetabolicMapSection } from "@/modules/metabolico/ui/metabolic-map-secti
 import { AvaliacaoIntegradaSection } from "@/modules/avaliacao-integrada/ui/avaliacao-integrada-panel";
 import { AnexosSection } from "@/modules/anexos/ui/anexos-section";
 import { PreConsultaSection } from "@/modules/pre-consulta/ui/pre-consulta-section";
+import { FinanceiroSection } from "@/modules/financeiro/ui/financeiro-section";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,6 +55,7 @@ export type WorkspaceSection =
   | "avaliacao"
   | "anexos"
   | "pre_consulta"
+  | "financeiro"
   | "historico";
 
 type Props = {
@@ -76,6 +78,7 @@ const SECTIONS: { id: WorkspaceSection; label: string }[] = [
   { id: "metabolico", label: "Mapa Metabólico" },
   { id: "avaliacao", label: "Avaliação integrada" },
   { id: "anexos", label: "Anexos e fotos" },
+  { id: "financeiro", label: "Financeiro" },
   { id: "diagnostico", label: "Diagnóstico" },
   { id: "plano", label: "Plano alimentar" },
   { id: "parecer", label: "Parecer" },
@@ -300,6 +303,8 @@ export function PatientWorkspaceDialog({
               <AnexosSection patientId={patientId} />
             ) : section === "pre_consulta" && patientId ? (
               <PreConsultaSection patientId={patientId} rows={rows} />
+            ) : section === "financeiro" && patientId ? (
+              <FinanceiroSection patientId={patientId} />
             ) : null}
           </main>
         </div>
