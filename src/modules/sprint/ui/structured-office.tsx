@@ -48,6 +48,7 @@ import {
   type KpiEntry,
 } from "@/modules/sprint/domain/kpis";
 import * as db from "@/modules/sprint/infrastructure/repository";
+import { listPatients } from "@/lib/nutrios/repository";
 
 type WorkspaceTab = "sprint" | "ofertas" | "crm" | "financeiro" | "kpis" | "ia";
 
@@ -847,6 +848,11 @@ function FinancePanel() {
   const queryClient = useQueryClient();
   const entries = useQuery({ queryKey: ["sprint-entries"], queryFn: db.listEntries });
   const offers = useQuery({ queryKey: ["sprint-offers"], queryFn: db.listOffers });
+  const patients = useQuery({ queryKey: ["patients"], queryFn: listPatients });
+  const patientNameById = useMemo(
+    () => new Map((patients.data ?? []).map((p) => [p.id, p.name])),
+    [patients.data],
+  );
   const [draft, setDraft] = useState({
     entry_type: "recebimento" as "contrato" | "recebimento" | "reconhecimento",
     amount: "",
@@ -854,6 +860,7 @@ function FinancePanel() {
     due_date: "",
     status: "ok" as "ok" | "pendente" | "atrasado",
     description: "",
+    patient_id: "",
   });
   const create = useMutation({
     mutationFn: () =>
@@ -864,6 +871,7 @@ function FinancePanel() {
         due_date: draft.due_date || null,
         status: draft.status,
         description: draft.description || null,
+        patient_id: draft.patient_id || null,
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["sprint-entries"] });
@@ -882,7 +890,7 @@ function FinancePanel() {
             pagamento pelo estágio do CRM.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 md:grid-cols-[180px_150px_160px_160px_160px_minmax(0,1fr)_auto]">
+        <CardContent className="grid gap-3 md:grid-cols-[180px_180px_150px_160px_160px_160px_minmax(0,1fr)_auto]">
           <select
             className="h-10 rounded-md border border-input bg-background px-3 text-sm"
             value={draft.entry_type}
@@ -893,6 +901,18 @@ function FinancePanel() {
             <option value="contrato">Contrato</option>
             <option value="recebimento">Recebimento</option>
             <option value="reconhecimento">Reconhecimento</option>
+          </select>
+          <select
+            className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+            value={draft.patient_id}
+            onChange={(e) => setDraft({ ...draft, patient_id: e.target.value })}
+          >
+            <option value="">Sem paciente vinculada</option>
+            {(patients.data ?? []).map((patient) => (
+              <option key={patient.id} value={patient.id}>
+                {patient.name}
+              </option>
+            ))}
           </select>
           <Input
             type="number"
@@ -946,6 +966,9 @@ function FinancePanel() {
                   <p className="font-medium">{entry.description || entry.entry_type}</p>
                   <p className="text-xs text-muted-foreground">
                     {entry.entry_date} · {entry.status}
+                    {entry.patient_id
+                      ? ` · ${patientNameById.get(entry.patient_id) ?? "paciente"}`
+                      : ""}
                   </p>
                 </div>
                 <span className="font-semibold">{brl(Number(entry.amount))}</span>
