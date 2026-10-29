@@ -33,6 +33,7 @@ import {
   gerarResumoDia,
 } from "@/modules/ia-gerente/application/resumo.functions";
 import type { TarefaTipo } from "@/modules/ia-gerente/domain/fila";
+import { aprovarAcao } from "@/modules/ia-gerente/infrastructure/acoes-repository";
 
 export type PatientRow = {
   patient: Patient;
@@ -238,7 +239,7 @@ export function AttentionCenter({
   const [resumoLoading, setResumoLoading] = useState(false);
   const [draftOpenId, setDraftOpenId] = useState<string | null>(null);
   const [draftLoadingId, setDraftLoadingId] = useState<string | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [drafts, setDrafts] = useState<Record<string, { mensagem: string; acaoId: string }>>({});
 
   async function handleGerarResumo() {
     setResumoLoading(true);
@@ -278,7 +279,10 @@ export function AttentionCenter({
           tipo: item.tipo,
         },
       });
-      setDrafts((current) => ({ ...current, [item.id]: result.mensagem }));
+      setDrafts((current) => ({
+        ...current,
+        [item.id]: { mensagem: result.mensagem, acaoId: result.acaoId },
+      }));
     } catch (error) {
       toast.error(describeAiError(error, "Escreva a mensagem manualmente enquanto isso."));
       setDraftOpenId(null);
@@ -287,13 +291,15 @@ export function AttentionCenter({
     }
   }
 
-  async function copyDraft(text: string) {
+  async function copyDraft(draft: { mensagem: string; acaoId: string }) {
     try {
-      await navigator.clipboard.writeText(text);
-      toast.success("Mensagem copiada.");
+      await navigator.clipboard.writeText(draft.mensagem);
     } catch {
       toast.error("Não foi possível copiar. Selecione o texto manualmente.");
+      return;
     }
+    toast.success("Mensagem copiada.");
+    void aprovarAcao(draft.acaoId);
   }
 
   return (
@@ -441,7 +447,9 @@ export function AttentionCenter({
                       <p className="text-xs text-muted-foreground">Gerando rascunho…</p>
                     ) : drafts[item.id] ? (
                       <div className="space-y-2">
-                        <p className="text-sm leading-6 text-foreground">{drafts[item.id]}</p>
+                        <p className="text-sm leading-6 text-foreground">
+                          {drafts[item.id]!.mensagem}
+                        </p>
                         <Button
                           type="button"
                           variant="outline"
