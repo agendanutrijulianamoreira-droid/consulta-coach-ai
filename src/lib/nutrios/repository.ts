@@ -20,6 +20,7 @@ export interface Patient {
   is_pregnant: boolean;
   pregnancy_weeks: number | null;
   tags: string[];
+  photo_consent_at: string | null;
   created_at: string;
 }
 
@@ -54,7 +55,7 @@ function unwrap<T>(result: { data: T | null; error: { message: string } | null }
 export async function listPatients() {
   return unwrap(
     await supabase.from("patients").select("*").order("created_at", { ascending: false }),
-  ) as Patient[];
+  ) as unknown as Patient[];
 }
 
 export type PatientInput = {
@@ -71,13 +72,15 @@ export type PatientInput = {
 };
 
 export async function createPatient(input: PatientInput) {
-  return unwrap(await supabase.from("patients").insert(input).select().single()) as Patient;
+  return unwrap(
+    await supabase.from("patients").insert(input).select().single(),
+  ) as unknown as Patient;
 }
 
 export async function updatePatient(id: string, input: PatientInput) {
   return unwrap(
     await supabase.from("patients").update(input).eq("id", id).select().single(),
-  ) as Patient;
+  ) as unknown as Patient;
 }
 
 /** Remove o paciente. Falha se já existirem consultas vinculadas (integridade clínica). */
@@ -107,7 +110,12 @@ export async function createConsultation(
   observations?: string,
   recordKind: Consultation["record_kind"] = "attendance",
 ) {
-  const payload: { patient_id: string; consultation_date?: string; observations?: string | null; record_kind: Consultation["record_kind"] } = {
+  const payload: {
+    patient_id: string;
+    consultation_date?: string;
+    observations?: string | null;
+    record_kind: Consultation["record_kind"];
+  } = {
     patient_id: patientId,
     record_kind: recordKind,
   };
@@ -120,7 +128,10 @@ export async function createConsultation(
 
 /** Oculta somente o registro administrativo; o prontuário clínico permanece intacto. */
 export async function hideConsultationFromHistory(id: string) {
-  const { error } = await supabase.from("consultations").update({ visible_in_history: false }).eq("id", id);
+  const { error } = await supabase
+    .from("consultations")
+    .update({ visible_in_history: false })
+    .eq("id", id);
   if (error) throw new Error(error.message);
 }
 
@@ -142,7 +153,18 @@ export async function listConsultationReport() {
 }
 
 export async function getPatient(id: string) {
-  return unwrap(await supabase.from("patients").select("*").eq("id", id).single()) as Patient;
+  return unwrap(
+    await supabase.from("patients").select("*").eq("id", id).single(),
+  ) as unknown as Patient;
+}
+
+/** Consentimento explícito da paciente para registro de fotos de evolução. */
+export async function setPhotoConsent(patientId: string) {
+  const { error } = await supabase
+    .from("patients")
+    .update({ photo_consent_at: new Date().toISOString() } as never)
+    .eq("id", patientId);
+  if (error) throw new Error(error.message);
 }
 
 /** Histórico completo de consultas de um paciente (ordem cronológica inversa). */
@@ -437,7 +459,9 @@ export async function saveMealPlan(consultationId: string, plan: MealPlan, ratio
     if (error) throw new Error(error.message);
     return;
   }
-  const { error } = await supabase.from("meal_plans").insert({ consultation_id: consultationId, ...payload });
+  const { error } = await supabase
+    .from("meal_plans")
+    .insert({ consultation_id: consultationId, ...payload });
   if (error) throw new Error(error.message);
 }
 

@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import * as db from "@/lib/nutrios/repository";
 import { ANAMNESIS_FIELDS } from "@/lib/nutrios/types";
 import * as labDb from "@/modules/exames/infrastructure/labs-repository";
+import * as anexosDb from "@/modules/anexos/infrastructure/patient-attachments-repository";
 import { describeAiError } from "@/lib/nutrios/ai-error";
 import {
   computeFontesReadiness,
@@ -73,8 +74,8 @@ export function AvaliacaoIntegradaSection({ patientId, rows }: Props) {
         <div>
           <h2 className="text-lg font-semibold">Avaliação integrada</h2>
           <p className="text-sm text-muted-foreground">
-            Reúne as fontes desta consulta (anamnese, transcrição, exames) e gera uma síntese
-            preliminar para revisão.
+            Reúne as fontes da paciente (anamnese, transcrição, exames, fotos de evolução) e gera
+            uma síntese preliminar para revisão.
           </p>
         </div>
         <Button type="button" onClick={() => create.mutate()} disabled={create.isPending}>
@@ -169,6 +170,10 @@ function AvaliacaoEditor({
     queryKey: ["avaliacao-integrada-exames-evolucao", patientId],
     queryFn: () => labDb.listPatientLabEvolution(patientId),
   });
+  const fotosQuery = useQuery({
+    queryKey: ["avaliacao-integrada-fotos", patientId],
+    queryFn: () => anexosDb.listAttachments(patientId, "foto_evolucao"),
+  });
   const telaSinteseQuery = useQuery({
     queryKey: ["avaliacao-integrada-tela", avaliacaoQuery.data?.id, "sintese"],
     queryFn: async () => {
@@ -201,8 +206,9 @@ function AvaliacaoEditor({
         anamnesisFields: anamneseQuery.data ?? {},
         segments: segmentsQuery.data ?? [],
         labResults: examesJanela,
+        photoCount: (fotosQuery.data ?? []).length,
       }),
-    [anamneseQuery.data, segmentsQuery.data, examesJanela],
+    [anamneseQuery.data, segmentsQuery.data, examesJanela, fotosQuery.data],
   );
 
   useEffect(() => {
@@ -271,6 +277,18 @@ function AvaliacaoEditor({
               `${r.analyte_name}: ${r.value} ${r.unit ?? ""} (coletado em ${formatConsultationDate(r.collection_date ?? r.consultation_date)})`.trim(),
             )
             .join("\n")}`,
+        );
+      }
+    }
+    if (included.has("fotos")) {
+      const fotos = fotosQuery.data ?? [];
+      if (fotos.length) {
+        const datas = fotos
+          .map((f) => f.takenAt ?? f.createdAt)
+          .sort()
+          .map((d) => formatConsultationDate(d));
+        blocks.push(
+          `EVOLUÇÃO FOTOGRÁFICA: ${fotos.length} foto(s) registrada(s) no prontuário, entre ${datas[0]} e ${datas[datas.length - 1]}. A IA não analisa o conteúdo das imagens — isso é revisado visualmente pela nutricionista no prontuário.`,
         );
       }
     }
