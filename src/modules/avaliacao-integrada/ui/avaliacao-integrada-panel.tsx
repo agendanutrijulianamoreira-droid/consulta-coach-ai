@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { AlertTriangle, ArrowLeft, Check, Loader2, Plus, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, Loader2, Plus, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import * as db from "@/lib/nutrios/repository";
 import { ANAMNESIS_FIELDS } from "@/lib/nutrios/types";
@@ -15,12 +16,18 @@ import {
   type FonteKey,
 } from "@/modules/avaliacao-integrada/domain/fontes-readiness";
 import * as avaliacaoDb from "@/modules/avaliacao-integrada/infrastructure/avaliacao-repository";
-import { generateSintese } from "@/modules/avaliacao-integrada/application/sintese.functions";
+import {
+  generateSintese,
+  type SinteseResult,
+} from "@/modules/avaliacao-integrada/application/sintese.functions";
 
 type Props = {
   patientId: string;
   rows: db.Consultation[];
 };
+
+const EXAM_WINDOWS = [3, 6, 12] as const;
+type ExamWindow = (typeof EXAM_WINDOWS)[number];
 
 export function AvaliacaoIntegradaSection({ patientId, rows }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -116,6 +123,14 @@ const SOURCE_LABELS: Record<FonteKey, string> = {
   fotos: "Evolução fotográfica",
 };
 
+const SINTESE_FIELD_LABELS: Record<keyof SinteseResult, string> = {
+  emUmaFrase: "Em uma frase dela",
+  quemEComoVive: "Quem é e como vive",
+  queixaPrincipal: "Queixa principal",
+  diagnosticosMedicamentos: "Diagnósticos e medicamentos informados",
+  objetivo: "Objetivo",
+};
+
 function AvaliacaoEditor({
   patientId,
   consultationId,
@@ -127,11 +142,12 @@ function AvaliacaoEditor({
 }) {
   const [tela, setTela] = useState<"fontes" | "sintese">("fontes");
   const [included, setIncluded] = useState<Set<FonteKey>>(new Set());
+  const [examWindow, setExamWindow] = useState<ExamWindow>(6);
+  const [instrucaoExtra, setInstrucaoExtra] = useState("");
+  const [refazerInstrucao, setRefazerInstrucao] = useState("");
+  const [showRefazer, setShowRefazer] = useState(false);
   const [finalText, setFinalText] = useState("");
-  const [aiDraft, setAiDraft] = useState<{
-    summary: string;
-    keyPoints: { text: string; source: string }[];
-  } | null>(null);
+  const [aiDraft, setAiDraft] = useState<SinteseResult | null>(null);
   const [matchedTerms, setMatchedTerms] = useState<string[]>([]);
   const [generating, setGenerating] = useState(false);
   const queryClient = useQueryClient();
@@ -149,9 +165,9 @@ function AvaliacaoEditor({
     queryKey: ["avaliacao-integrada-segments", consultationId],
     queryFn: () => db.listSegments(consultationId),
   });
-  const labResultsQuery = useQuery({
-    queryKey: ["avaliacao-integrada-exames", consultationId],
-    queryFn: () => labDb.listLabResults(consultationId),
+  const examEvolutionQuery = useQuery({
+    queryKey: ["avaliacao-integrada-exames-evolucao", patientId],
+    queryFn: () => labDb.listPatientLabEvolution(patientId),
   });
   const telaSinteseQuery = useQuery({
     queryKey: ["avaliacao-integrada-tela", avaliacaoQuery.data?.id, "sintese"],
@@ -166,27 +182,38 @@ function AvaliacaoEditor({
     if (!telaSinteseQuery.data) return;
     const saved = telaSinteseQuery.data.final_text as { text?: string } | null;
     if (saved?.text) setFinalText(saved.text);
-    const draft = telaSinteseQuery.data.ai_text as {
-      summary?: string;
-      keyPoints?: { text: string; source: string }[];
-    } | null;
-    if (draft?.summary) setAiDraft({ summary: draft.summary, keyPoints: draft.keyPoints ?? [] });
+    const draft = telaSinteseQuery.data.ai_text as SinteseResult | null;
+    if (draft?.emUmaFrase) setAiDraft(draft);
   }, [telaSinteseQuery.data]);
+
+  const examesJanela = useMemo(() => {
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - examWindow);
+    return (examEvolutionQuery.data ?? []).filter((point) => {
+      const date = point.collection_date ?? point.consultation_date;
+      return date && new Date(date) >= cutoff;
+    });
+  }, [examEvolutionQuery.data, examWindow]);
 
   const readiness = useMemo(
     () =>
       computeFontesReadiness({
         anamnesisFields: anamneseQuery.data ?? {},
         segments: segmentsQuery.data ?? [],
-        labResults: labResultsQuery.data ?? [],
+        labResults: examesJanela,
       }),
-    [anamneseQuery.data, segmentsQuery.data, labResultsQuery.data],
+    [anamneseQuery.data, segmentsQuery.data, examesJanela],
   );
 
   useEffect(() => {
     const ready = new Set(readiness.filter((f) => f.implemented && f.ready).map((f) => f.key));
     setIncluded((current) => (current.size ? current : ready));
   }, [readiness]);
+
+  const missingSources = useMemo(
+    () => readiness.filter((f) => f.implemented && included.has(f.key) && !f.ready),
+    [readiness, included],
+  );
 
   const createAvaliacao = useMutation({
     mutationFn: () => avaliacaoDb.createAvaliacao(consultationId),
@@ -228,23 +255,29 @@ function AvaliacaoEditor({
     }
     if (included.has("transcricao")) {
       const segments = segmentsQuery.data ?? [];
-      if (segments.length)
+      if (segments.length) {
         blocks.push(
-          `TRANSCRIÇÃO DA CONSULTA:\n${segments.map((s) => `${s.speaker}: ${s.content}`).join("\n")}`,
+          `TRANSCRIÇÃO DA CONSULTA (marca de tempo entre colchetes):\n${segments
+            .map((s) => `[${formatMinuto(s.offset_seconds)}] ${s.speaker}: ${s.content}`)
+            .join("\n")}`,
         );
+      }
     }
     if (included.has("exames")) {
-      const results = labResultsQuery.data ?? [];
-      if (results.length) {
+      if (examesJanela.length) {
         blocks.push(
-          `EXAMES:\n${results.map((r) => `${r.analyte_name}: ${r.value ?? r.value_text ?? "—"} ${r.unit ?? ""}`.trim()).join("\n")}`,
+          `EXAMES (últimos ${examWindow} meses):\n${examesJanela
+            .map((r) =>
+              `${r.analyte_name}: ${r.value} ${r.unit ?? ""} (coletado em ${formatConsultationDate(r.collection_date ?? r.consultation_date)})`.trim(),
+            )
+            .join("\n")}`,
         );
       }
     }
     return blocks.join("\n\n");
   }
 
-  async function handleGenerate() {
+  async function handleGenerate(instrucao?: string) {
     const sourcesText = buildSourcesText();
     if (!sourcesText.trim()) {
       toast.error("Selecione ao menos uma fonte com conteúdo antes de gerar a síntese.");
@@ -253,25 +286,26 @@ function AvaliacaoEditor({
     setGenerating(true);
     setMatchedTerms([]);
     try {
-      const result = await generate({ data: { sourcesText } });
+      const result = await generate({
+        data: {
+          sourcesText,
+          instrucaoExtra: (instrucao ?? instrucaoExtra.trim()) || undefined,
+        },
+      });
       if (result.blocked) {
         setMatchedTerms(result.matchedTerms);
         setAiDraft(null);
         return;
       }
-      setAiDraft({ summary: result.summary ?? "", keyPoints: result.keyPoints ?? [] });
-      if (!finalText.trim()) {
-        setFinalText(
-          [result.summary, ...(result.keyPoints ?? []).map((p) => `- ${p.text} (${p.source})`)]
-            .filter(Boolean)
-            .join("\n\n"),
-        );
-      }
+      setAiDraft(result.sintese);
+      if (result.sintese) setFinalText(formatSinteseAsText(result.sintese));
       await saveTela.mutateAsync({
-        ai_text: { summary: result.summary, keyPoints: result.keyPoints },
+        ai_text: result.sintese,
         sources: [...included],
         status: "revisao",
       });
+      setShowRefazer(false);
+      setRefazerInstrucao("");
     } catch (error) {
       toast.error(describeAiError(error, "Preencha a síntese manualmente enquanto isso."));
     } finally {
@@ -350,9 +384,47 @@ function AvaliacaoEditor({
                   ) : null}
                 </span>
                 <span className="text-xs text-muted-foreground">{fonte.detail}</span>
+                {fonte.key === "exames" && fonte.implemented ? (
+                  <span className="mt-2 flex items-center gap-2 text-xs">
+                    Janela:
+                    {EXAM_WINDOWS.map((months) => (
+                      <button
+                        key={months}
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setExamWindow(months);
+                        }}
+                        className={`rounded-full border px-2 py-0.5 ${examWindow === months ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground"}`}
+                      >
+                        {months} meses
+                      </button>
+                    ))}
+                  </span>
+                ) : null}
               </span>
             </label>
           ))}
+
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">
+              Instrução extra para a IA (opcional)
+            </label>
+            <Input
+              value={instrucaoExtra}
+              onChange={(e) => setInstrucaoExtra(e.target.value)}
+              placeholder="Ex.: priorizar intestino"
+            />
+          </div>
+
+          {missingSources.length > 0 ? (
+            <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+              Faltam dados em: {missingSources.map((f) => SOURCE_LABELS[f.key]).join(", ")}. Posso
+              gerar mesmo assim; esses pontos aparecem como "sem dado" e não entram na síntese.
+            </div>
+          ) : null}
+
           <div className="flex justify-end">
             <Button type="button" onClick={() => setTela("sintese")}>
               Continuar para Síntese
@@ -362,7 +434,7 @@ function AvaliacaoEditor({
       ) : (
         <div className="space-y-4">
           {matchedTerms.length > 0 ? (
-            <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            <div className="flex items-start gap-3 rounded-lg border border-warm/30 bg-warm/10 p-3 text-sm text-warm">
               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
               <span>
                 Sinais de alerta identificados nas fontes selecionadas:{" "}
@@ -378,17 +450,73 @@ function AvaliacaoEditor({
           </Button>
 
           {aiDraft ? (
-            <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3 text-sm">
+            <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-3 text-sm">
               <p className="font-medium">Rascunho gerado pela IA (revisar antes de usar):</p>
-              <p>{aiDraft.summary}</p>
-              <ul className="list-disc space-y-1 pl-5">
-                {aiDraft.keyPoints.map((point, index) => (
-                  <li key={index}>
-                    {point.text}{" "}
-                    <span className="text-xs text-muted-foreground">({point.source})</span>
-                  </li>
-                ))}
-              </ul>
+              <dl className="space-y-2">
+                <div>
+                  <dt className="text-xs font-semibold text-muted-foreground">
+                    {SINTESE_FIELD_LABELS.emUmaFrase}
+                  </dt>
+                  <dd className="italic">"{aiDraft.emUmaFrase}"</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold text-muted-foreground">
+                    {SINTESE_FIELD_LABELS.quemEComoVive}
+                  </dt>
+                  <dd>{aiDraft.quemEComoVive}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold text-muted-foreground">
+                    {SINTESE_FIELD_LABELS.queixaPrincipal}
+                  </dt>
+                  <dd>{aiDraft.queixaPrincipal}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold text-muted-foreground">
+                    {SINTESE_FIELD_LABELS.diagnosticosMedicamentos}
+                  </dt>
+                  <dd>
+                    {aiDraft.diagnosticosMedicamentos.length
+                      ? aiDraft.diagnosticosMedicamentos.join(", ")
+                      : "sem dado"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-semibold text-muted-foreground">
+                    {SINTESE_FIELD_LABELS.objetivo}
+                  </dt>
+                  <dd>{aiDraft.objetivo}</dd>
+                </div>
+              </dl>
+
+              {showRefazer ? (
+                <div className="space-y-2 border-t border-border pt-3">
+                  <Input
+                    value={refazerInstrucao}
+                    onChange={(e) => setRefazerInstrucao(e.target.value)}
+                    placeholder="Ex.: focar mais no sono e menos na alimentação"
+                    autoFocus
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={generating || !refazerInstrucao.trim()}
+                    onClick={() => void handleGenerate(refazerInstrucao.trim())}
+                  >
+                    <RefreshCw /> Gerar com esta instrução
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowRefazer(true)}
+                >
+                  <RefreshCw /> Refazer com esta instrução
+                </Button>
+              )}
             </div>
           ) : null}
 
@@ -415,7 +543,7 @@ function AvaliacaoEditor({
                 })
               }
             >
-              Salvar rascunho
+              Editar e salvar rascunho
             </Button>
             <Button
               type="button"
@@ -428,11 +556,27 @@ function AvaliacaoEditor({
                 })
               }
             >
-              Aprovar síntese
+              Aceitar síntese
             </Button>
           </div>
         </div>
       )}
     </div>
   );
+}
+
+function formatSinteseAsText(sintese: SinteseResult): string {
+  return [
+    `${SINTESE_FIELD_LABELS.emUmaFrase}: "${sintese.emUmaFrase}"`,
+    `${SINTESE_FIELD_LABELS.quemEComoVive}: ${sintese.quemEComoVive}`,
+    `${SINTESE_FIELD_LABELS.queixaPrincipal}: ${sintese.queixaPrincipal}`,
+    `${SINTESE_FIELD_LABELS.diagnosticosMedicamentos}: ${sintese.diagnosticosMedicamentos.join(", ") || "sem dado"}`,
+    `${SINTESE_FIELD_LABELS.objetivo}: ${sintese.objetivo}`,
+  ].join("\n\n");
+}
+
+function formatMinuto(offsetSeconds: number): string {
+  const minutes = Math.floor(offsetSeconds / 60);
+  const seconds = Math.floor(offsetSeconds % 60);
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
