@@ -55,7 +55,7 @@ function unwrap<T>(result: { data: T | null; error: { message: string } | null }
 export async function listPatients() {
   return unwrap(
     await supabase.from("patients").select("*").order("created_at", { ascending: false }),
-  ) as Patient[];
+  ) as unknown as Patient[];
 }
 
 export type PatientInput = {
@@ -72,13 +72,15 @@ export type PatientInput = {
 };
 
 export async function createPatient(input: PatientInput) {
-  return unwrap(await supabase.from("patients").insert(input).select().single()) as Patient;
+  return unwrap(
+    await supabase.from("patients").insert(input).select().single(),
+  ) as unknown as Patient;
 }
 
 export async function updatePatient(id: string, input: PatientInput) {
   return unwrap(
     await supabase.from("patients").update(input).eq("id", id).select().single(),
-  ) as Patient;
+  ) as unknown as Patient;
 }
 
 /** Remove o paciente. Falha se já existirem consultas vinculadas (integridade clínica). */
@@ -151,7 +153,9 @@ export async function listConsultationReport() {
 }
 
 export async function getPatient(id: string) {
-  return unwrap(await supabase.from("patients").select("*").eq("id", id).single()) as Patient;
+  return unwrap(
+    await supabase.from("patients").select("*").eq("id", id).single(),
+  ) as unknown as Patient;
 }
 
 /** Consentimento explícito da paciente para registro de fotos de evolução. */
