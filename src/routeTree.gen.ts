@@ -21,6 +21,7 @@ import { Route as ConsultaIdRouteImport } from './routes/consulta.$id'
 import { Route as PacienteIdRouteImport } from './routes/paciente.$id'
 import { Route as ParecerIdRouteImport } from './routes/parecer.$id'
 import { Route as ProntuarioIdRouteImport } from './routes/prontuario.$id'
+import { Route as PreConsultaTokenRouteImport } from './routes/pre-consulta.$token'
 import { Route as DotlovableOauthConsentRouteImport } from './routes/[.]lovable.oauth.consent'
 import { Route as ConsultorioMetodoInteligenteRouteImport } from './routes/consultorio.metodo.inteligente'
 
@@ -85,6 +86,11 @@ const ProntuarioIdRoute = ProntuarioIdRouteImport.update({
   path: '/prontuario/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PreConsultaTokenRoute = PreConsultaTokenRouteImport.update({
+  id: '/pre-consulta/$token',
+  path: '/pre-consulta/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DotlovableOauthConsentRoute = DotlovableOauthConsentRouteImport.update({
   id: '/.lovable/oauth/consent',
   path: '/.lovable/oauth/consent',
@@ -110,6 +116,7 @@ export interface FileRoutesByFullPath {
   '/paciente/$id': typeof PacienteIdRoute
   '/parecer/$id': typeof ParecerIdRoute
   '/prontuario/$id': typeof ProntuarioIdRoute
+  '/pre-consulta/$token': typeof PreConsultaTokenRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/consultorio/metodo/inteligente': typeof ConsultorioMetodoInteligenteRoute
 }
@@ -126,6 +133,7 @@ export interface FileRoutesByTo {
   '/paciente/$id': typeof PacienteIdRoute
   '/parecer/$id': typeof ParecerIdRoute
   '/prontuario/$id': typeof ProntuarioIdRoute
+  '/pre-consulta/$token': typeof PreConsultaTokenRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/consultorio/metodo/inteligente': typeof ConsultorioMetodoInteligenteRoute
 }
@@ -143,6 +151,7 @@ export interface FileRoutesById {
   '/paciente/$id': typeof PacienteIdRoute
   '/parecer/$id': typeof ParecerIdRoute
   '/prontuario/$id': typeof ProntuarioIdRoute
+  '/pre-consulta/$token': typeof PreConsultaTokenRoute
   '/.lovable/oauth/consent': typeof DotlovableOauthConsentRoute
   '/consultorio/metodo/inteligente': typeof ConsultorioMetodoInteligenteRoute
 }
@@ -161,6 +170,7 @@ export interface FileRouteTypes {
     | '/paciente/$id'
     | '/parecer/$id'
     | '/prontuario/$id'
+    | '/pre-consulta/$token'
     | '/.lovable/oauth/consent'
     | '/consultorio/metodo/inteligente'
   fileRoutesByTo: FileRoutesByTo
@@ -177,6 +187,7 @@ export interface FileRouteTypes {
     | '/paciente/$id'
     | '/parecer/$id'
     | '/prontuario/$id'
+    | '/pre-consulta/$token'
     | '/.lovable/oauth/consent'
     | '/consultorio/metodo/inteligente'
   id:
@@ -193,6 +204,7 @@ export interface FileRouteTypes {
     | '/paciente/$id'
     | '/parecer/$id'
     | '/prontuario/$id'
+    | '/pre-consulta/$token'
     | '/.lovable/oauth/consent'
     | '/consultorio/metodo/inteligente'
   fileRoutesById: FileRoutesById
@@ -210,6 +222,7 @@ export interface RootRouteChildren {
   PacienteIdRoute: typeof PacienteIdRoute
   ParecerIdRoute: typeof ParecerIdRoute
   ProntuarioIdRoute: typeof ProntuarioIdRoute
+  PreConsultaTokenRoute: typeof PreConsultaTokenRoute
   DotlovableOauthConsentRoute: typeof DotlovableOauthConsentRoute
 }
 
@@ -299,6 +312,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProntuarioIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pre-consulta/$token': {
+      id: '/pre-consulta/$token'
+      path: '/pre-consulta/$token'
+      fullPath: '/pre-consulta/$token'
+      preLoaderRoute: typeof PreConsultaTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/.lovable/oauth/consent': {
       id: '/.lovable/oauth/consent'
       path: '/.lovable/oauth/consent'
@@ -342,6 +362,7 @@ const rootRouteChildren: RootRouteChildren = {
   PacienteIdRoute: PacienteIdRoute,
   ParecerIdRoute: ParecerIdRoute,
   ProntuarioIdRoute: ProntuarioIdRoute,
+  PreConsultaTokenRoute: PreConsultaTokenRoute,
   DotlovableOauthConsentRoute: DotlovableOauthConsentRoute,
 }
 export const routeTree = rootRouteImport

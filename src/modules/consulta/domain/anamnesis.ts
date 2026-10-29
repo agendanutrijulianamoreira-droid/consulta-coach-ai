@@ -15,6 +15,7 @@ import {
 export function mergeAnamnesisSuggestions(
   current: AnamnesisFields,
   extracted: Partial<Record<AnamnesisKey, string | null | undefined>>,
+  source = "transcrição",
 ): AnamnesisFields {
   const next: AnamnesisFields = { ...current };
 
@@ -29,7 +30,7 @@ export function mergeAnamnesisSuggestions(
     next[key] = {
       value,
       status: "sugerido",
-      source: "transcrição",
+      source,
     };
   }
 
