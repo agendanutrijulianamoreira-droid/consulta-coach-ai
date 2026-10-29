@@ -8,37 +8,47 @@ import { asAvaliacaoClient } from "@/modules/avaliacao-integrada/infrastructure/
 const ENDPOINT = "https://ai.gateway.lovable.dev/v1/responses";
 const MODEL = "openai/gpt-5.6-sol";
 
+/**
+ * Tela 2 — Síntese da paciente: começa pela vida dela e só depois entra na
+ * clínica, porque é essa a ordem em que ela se reconhece no texto (conforme
+ * a especificação). Os 5 campos são exatamente os pedidos: citação literal,
+ * quem é/como vive, queixa principal, diagnósticos/medicamentos informados
+ * e objetivo — nunca um resumo genérico.
+ */
 const sinteseSchema = {
-  name: "integrated_synthesis",
+  name: "sintese_paciente",
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["summary", "key_points"],
+    required: [
+      "em_uma_frase",
+      "quem_e_como_vive",
+      "queixa_principal",
+      "diagnosticos_medicamentos",
+      "objetivo",
+    ],
     properties: {
-      summary: { type: "string" },
-      key_points: {
-        type: "array",
-        items: {
-          type: "object",
-          additionalProperties: false,
-          required: ["text", "source"],
-          properties: {
-            text: { type: "string" },
-            source: { type: "string" },
-          },
-        },
-      },
+      em_uma_frase: { type: "string" },
+      quem_e_como_vive: { type: "string" },
+      queixa_principal: { type: "string" },
+      diagnosticos_medicamentos: { type: "array", items: { type: "string" } },
+      objetivo: { type: "string" },
     },
   },
 } as const;
 
-const instructions = `Você redige uma síntese clínica preliminar para revisão de uma nutricionista especializada em saúde da mulher.
+const instructions = `Você escreve rascunhos de avaliação clínica para uma nutricionista que atende saúde da mulher.
 REGRAS OBRIGATÓRIAS:
-- use somente as informações presentes no texto fornecido; nunca invente dados, diagnósticos ou condutas;
-- cada ponto de "key_points" precisa citar exatamente de qual fonte ele vem (ex.: "anamnese", "transcrição da consulta", "exames");
-- nunca sugira diagnóstico, conduta, suplementação ou prescrição — isso é decisão exclusiva da profissional;
-- se os dados forem insuficientes para algum ponto, diga isso explicitamente em vez de completar com suposições;
-- escreva em português do Brasil, linguagem clara e objetiva, sem terrorismo nutricional.
+1. Use apenas o que está nas fontes fornecidas. Nunca preencha lacuna com suposição.
+2. Se não há dado para um campo, escreva "sem dado" nesse campo.
+3. Não diagnostique. Use "pode estar ligado a" e "sugere" em vez de afirmações clínicas definitivas.
+4. Não sugira suplemento, dose nem mudança de medicamento. Se a paciente usa medicamento, incluindo análogos de GLP-1, apenas registre e sinalize para revisão da nutricionista.
+5. "em_uma_frase" é uma citação quase literal da paciente, tirada da transcrição (inclua a marca de tempo entre colchetes se houver uma no texto fornecido).
+6. "quem_e_como_vive" e "queixa_principal" vêm da anamnese e da consulta — comece pela experiência da paciente, depois o lado clínico.
+7. "diagnosticos_medicamentos" lista só o que a própria paciente informou (anamnese), nunca o que a IA concluiu.
+8. "objetivo" vem do que a paciente disse querer na consulta.
+9. Tom claro e acolhedor, comida brasileira do dia a dia, sem terrorismo nutricional, sem culpa e sem promessa de resultado.
+10. Escreva em português do Brasil.
 Este é um rascunho para revisão humana antes de qualquer uso clínico ou envio à paciente.`;
 
 export const generateSintese = createServerFn({ method: "POST" })
@@ -47,6 +57,7 @@ export const generateSintese = createServerFn({ method: "POST" })
     z
       .object({
         sourcesText: z.string().min(1).max(60000),
+        instrucaoExtra: z.string().max(2000).optional(),
       })
       .parse(input),
   )
@@ -63,16 +74,26 @@ export const generateSintese = createServerFn({ method: "POST" })
       (terms ?? []).map((row) => row.term),
     );
     if (matchedTerms.length > 0) {
-      return { blocked: true as const, matchedTerms, summary: null, keyPoints: [] };
+      return { blocked: true as const, matchedTerms, sintese: null };
     }
 
-    const synthesis = await callSinteseAi(data.sourcesText);
-    return { blocked: false as const, matchedTerms: [], ...synthesis };
+    const userText = data.instrucaoExtra?.trim()
+      ? `Instrução adicional da profissional para esta geração: ${data.instrucaoExtra.trim()}\n\n${data.sourcesText}`
+      : data.sourcesText;
+
+    const sintese = await callSinteseAi(userText);
+    return { blocked: false as const, matchedTerms: [], sintese };
   });
 
-async function callSinteseAi(
-  sourcesText: string,
-): Promise<{ summary: string; keyPoints: { text: string; source: string }[] }> {
+export interface SinteseResult {
+  emUmaFrase: string;
+  quemEComoVive: string;
+  queixaPrincipal: string;
+  diagnosticosMedicamentos: string[];
+  objetivo: string;
+}
+
+async function callSinteseAi(sourcesText: string): Promise<SinteseResult> {
   const apiKey = process.env["LOVABLE_API_KEY"];
   if (!apiKey) throw new Error("A integração de IA para síntese não está configurada no servidor.");
 
@@ -129,20 +150,30 @@ async function callSinteseAi(
     throw new Error("A IA respondeu em um formato inesperado ao gerar a síntese.");
   }
 
-  const result = parsed as { summary?: unknown; key_points?: unknown };
-  if (typeof result.summary !== "string" || !Array.isArray(result.key_points)) {
+  const result = parsed as {
+    em_uma_frase?: unknown;
+    quem_e_como_vive?: unknown;
+    queixa_principal?: unknown;
+    diagnosticos_medicamentos?: unknown;
+    objetivo?: unknown;
+  };
+  if (
+    typeof result.em_uma_frase !== "string" ||
+    typeof result.quem_e_como_vive !== "string" ||
+    typeof result.queixa_principal !== "string" ||
+    !Array.isArray(result.diagnosticos_medicamentos) ||
+    typeof result.objetivo !== "string"
+  ) {
     throw new Error("A IA respondeu em um formato inesperado ao gerar a síntese.");
   }
 
-  const keyPoints = result.key_points
-    .filter(
-      (item): item is { text: string; source: string } =>
-        typeof item === "object" &&
-        item !== null &&
-        typeof (item as { text?: unknown }).text === "string" &&
-        typeof (item as { source?: unknown }).source === "string",
-    )
-    .map((item) => ({ text: item.text, source: item.source }));
-
-  return { summary: result.summary, keyPoints };
+  return {
+    emUmaFrase: result.em_uma_frase,
+    quemEComoVive: result.quem_e_como_vive,
+    queixaPrincipal: result.queixa_principal,
+    diagnosticosMedicamentos: result.diagnosticos_medicamentos.filter(
+      (item): item is string => typeof item === "string",
+    ),
+    objetivo: result.objetivo,
+  };
 }
