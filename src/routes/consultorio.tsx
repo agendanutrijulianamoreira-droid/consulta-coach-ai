@@ -18,6 +18,7 @@ import {
   Plus,
   Save,
   Sparkles,
+  Stethoscope,
   Trash2,
   Target,
   Users,
@@ -50,13 +51,15 @@ import {
   type AcaoAgente,
 } from "@/modules/ia-gerente/infrastructure/acoes-repository";
 import { StructuredOffice } from "@/modules/sprint/ui/structured-office";
+import { ProtocolosSection } from "@/modules/protocolos/ui/protocolos-section";
 
 export const Route = createFileRoute("/consultorio")({
   head: () => ({ meta: [{ title: "Meu Consultório — Cach AI" }] }),
   component: ClinicOfficePage,
 });
 
-type OfficeTab = "metodo" | "relatorios" | "historico" | "estruturado" | "produtos" | "financeiro";
+type OfficeTab =
+  "metodo" | "protocolos" | "relatorios" | "historico" | "estruturado" | "produtos" | "financeiro";
 
 const officeSections: Array<{
   id: OfficeTab;
@@ -77,6 +80,13 @@ const officeSections: Array<{
     title: "Método",
     description: "Fases, metas, receitas e materiais clínicos.",
     icon: Layers3,
+    available: true,
+  },
+  {
+    id: "protocolos",
+    title: "Protocolos por condição",
+    description: "Mioma, endometriose, adenomiose, SOMP e outras condições.",
+    icon: Stethoscope,
     available: true,
   },
   {
@@ -189,6 +199,8 @@ function ClinicOfficePage() {
                 <ConsultationReport />
               ) : tab === "historico" ? (
                 <AiHistoryPanel />
+              ) : tab === "protocolos" ? (
+                <ProtocolosSection />
               ) : tab === "estruturado" ? (
                 <StructuredOffice />
               ) : (
