@@ -157,6 +157,20 @@ export async function listAppointmentsForConflictCheck(rangeStartIso: string, ra
   }[];
 }
 
+/** Usado pela fila da IA Gerente para detectar faltas sem remarcação: precisa do histórico inteiro do paciente, não só de uma janela. */
+export async function listAllAppointmentsForTasks() {
+  const { data, error } = await agendaSupabase
+    .from("appointments")
+    .select("id, patient_id, scheduled_at, status");
+  if (error) throw new Error(error.message);
+  return (data ?? []) as {
+    id: string;
+    patient_id: string;
+    scheduled_at: string;
+    status: AppointmentStatus;
+  }[];
+}
+
 export async function createAppointment(input: {
   patient_id: string;
   scheduled_at: string;

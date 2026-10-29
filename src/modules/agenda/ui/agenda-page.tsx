@@ -94,22 +94,23 @@ export function AgendaPage() {
 
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-      <header className="mb-6 flex flex-col gap-4 border-b border-border/70 pb-6 lg:flex-row lg:items-end lg:justify-between">
+      <header className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             <CalendarDays className="size-3.5" />
             Agenda
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Consultas agendadas</h1>
+          <h1 className="font-display text-2xl font-semibold tracking-tight sm:text-3xl">
+            {view === "semana" ? formatMonthYear(weekStart) : "Próximas consultas"}
+          </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
             Status de confirmação e falta por consulta. Lembrete automático por WhatsApp e
-            sincronização com o Google Agenda ainda não estão conectados — dependem de uma
-            integração externa a configurar.
+            sincronização com o Google Agenda ainda dependem de uma integração externa a configurar.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {pendingCount > 0 ? (
-            <Badge variant="outline" className="gap-1 border-amber-300 text-amber-700">
+            <Badge variant="outline" className="gap-1 border-transparent bg-warm/15 text-warm">
               <AlertTriangle className="size-3" /> {pendingCount} pendente
               {pendingCount === 1 ? "" : "s"}
             </Badge>
@@ -118,14 +119,14 @@ export function AgendaPage() {
             <button
               type="button"
               onClick={() => setView("semana")}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 ${view === "semana" ? "bg-background font-medium shadow-sm" : "text-muted-foreground"}`}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 transition-colors ${view === "semana" ? "bg-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             >
               <CalendarDays className="size-3.5" /> Semana
             </button>
             <button
               type="button"
               onClick={() => setView("lista")}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 ${view === "lista" ? "bg-background font-medium shadow-sm" : "text-muted-foreground"}`}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 transition-colors ${view === "lista" ? "bg-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             >
               <List className="size-3.5" /> Lista
             </button>
@@ -158,7 +159,8 @@ export function AgendaPage() {
           )}
         </section>
 
-        <aside>
+        <aside className="space-y-6">
+          <Legenda />
           <WaitlistPanel entries={waitlistQuery.data ?? []} />
         </aside>
       </div>
@@ -219,7 +221,7 @@ function WeekView({
   const todayKey = new Date().toISOString().slice(0, 10);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+    <div className="cach-panel overflow-hidden">
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div className="flex items-center gap-1">
           <Button
@@ -231,7 +233,7 @@ function WeekView({
           >
             <ChevronLeft />
           </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={onToday}>
+          <Button type="button" variant="outline" size="sm" onClick={onToday}>
             Hoje
           </Button>
           <Button
@@ -244,7 +246,7 @@ function WeekView({
             <ChevronRight />
           </Button>
         </div>
-        <span className="text-sm font-medium">
+        <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
           {formatShortDate(days[0]!)} – {formatShortDate(days[6]!)}
         </span>
       </div>
@@ -256,17 +258,28 @@ function WeekView({
           {days.map((day, index) => {
             const key = day.toISOString().slice(0, 10);
             const appointments = byDay.get(key) ?? [];
+            const isToday = key === todayKey;
+            const isPast = key < todayKey;
             return (
-              <div key={key} className={`min-h-[320px] ${key === todayKey ? "bg-accent/30" : ""}`}>
+              <div
+                key={key}
+                className={`min-h-[320px] ${isToday ? "bg-accent/25" : isPast ? "bg-muted/30" : "bg-background"}`}
+              >
                 <button
                   type="button"
                   onClick={() => onSlotClick(day)}
-                  className="w-full border-b border-border px-2 py-2 text-center hover:bg-muted/40"
+                  className="w-full border-b border-border px-2 py-2 text-center transition-colors hover:bg-muted/40"
                 >
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                     {WEEKDAY_LABELS[index]}
                   </p>
-                  <p className="text-sm font-semibold">{day.getDate()}</p>
+                  <p
+                    className={`mx-auto mt-0.5 flex size-6 items-center justify-center rounded-full text-sm font-semibold ${
+                      isToday ? "bg-primary text-primary-foreground" : "text-foreground"
+                    }`}
+                  >
+                    {day.getDate()}
+                  </p>
                 </button>
                 <div className="space-y-1.5 p-1.5">
                   {appointments.map((appointment) => (
@@ -276,6 +289,11 @@ function WeekView({
                       onClick={() => onAppointmentClick(appointment)}
                     />
                   ))}
+                  {!appointments.length ? (
+                    <p className="px-1 py-2 text-center text-[11px] text-muted-foreground/70">
+                      Sem consultas
+                    </p>
+                  ) : null}
                 </div>
               </div>
             );
@@ -296,7 +314,7 @@ function ListView({
   onAppointmentClick: (appointment: AppointmentWithPatient) => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+    <div className="cach-panel overflow-hidden">
       <div className="border-b border-border px-5 py-4">
         <h2 className="text-sm font-semibold">Próximas consultas</h2>
       </div>
@@ -337,26 +355,31 @@ function AppointmentCard({
   appointment: AppointmentWithPatient;
   onClick: () => void;
 }) {
+  const style = STATUS_STYLES[appointment.status];
   return (
     <button
       type="button"
       onClick={onClick}
-      className="w-full rounded-md border border-border/70 bg-background px-2 py-1.5 text-left text-xs hover:border-border"
+      className={`w-full rounded-lg border-l-[3px] bg-background px-2.5 py-1.5 text-left text-xs shadow-sm transition-colors hover:brightness-95 ${style.border}`}
     >
-      <p className="font-medium text-foreground">
+      <p className="font-semibold text-foreground">
         {formatTime(new Date(appointment.scheduled_at))}
       </p>
       <p className="truncate text-muted-foreground">{appointment.patient_name}</p>
-      <StatusDot status={appointment.status} />
+      <StatusChip status={appointment.status} compact />
     </button>
   );
 }
 
-function StatusDot({ status }: { status: AppointmentStatus }) {
-  const className = statusColor(status);
+function StatusChip({ status, compact = false }: { status: AppointmentStatus; compact?: boolean }) {
+  const style = STATUS_STYLES[status];
   return (
-    <span className="mt-1 flex items-center gap-1 text-[10px]">
-      <span className={`size-1.5 rounded-full ${className}`} />
+    <span
+      className={`mt-1 inline-flex items-center gap-1 rounded-full font-medium ${style.chip} ${
+        compact ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-0.5 text-[11px]"
+      }`}
+    >
+      <span className={`size-1.5 rounded-full ${style.dot}`} />
       {APPOINTMENT_STATUS_LABEL[status]}
     </span>
   );
@@ -364,27 +387,79 @@ function StatusDot({ status }: { status: AppointmentStatus }) {
 
 function StatusBadge({ status }: { status: AppointmentStatus }) {
   return (
-    <Badge variant="outline" className="shrink-0 gap-1.5">
-      <span className={`size-1.5 rounded-full ${statusColor(status)}`} />
+    <Badge
+      variant="outline"
+      className={`shrink-0 gap-1.5 border-transparent ${STATUS_STYLES[status].chip}`}
+    >
+      <span className={`size-1.5 rounded-full ${STATUS_STYLES[status].dot}`} />
       {APPOINTMENT_STATUS_LABEL[status]}
     </Badge>
   );
 }
 
-function statusColor(status: AppointmentStatus): string {
-  switch (status) {
-    case "confirmado_profissional":
-    case "confirmado_paciente":
-      return "bg-emerald-500";
-    case "desmarcado_profissional":
-    case "desmarcado_paciente":
-    case "nao_compareceu":
-      return "bg-destructive";
-    case "realizado":
-      return "bg-muted-foreground";
-    default:
-      return "bg-amber-500";
-  }
+/** Uma cor por status, usando a paleta premium do Cach AI — nunca as cores genéricas do Tailwind. */
+const STATUS_STYLES: Record<AppointmentStatus, { dot: string; chip: string; border: string }> = {
+  agendado: { dot: "bg-sand-ink", chip: "bg-sand-soft text-sand-ink", border: "border-l-sand" },
+  encaixe: { dot: "bg-plum", chip: "bg-plum-soft text-plum", border: "border-l-plum" },
+  confirmado_profissional: {
+    dot: "bg-accent-foreground",
+    chip: "bg-accent text-accent-foreground",
+    border: "border-l-accent-foreground",
+  },
+  confirmado_paciente: {
+    dot: "bg-success",
+    chip: "bg-success/15 text-success",
+    border: "border-l-success",
+  },
+  desmarcado_profissional: {
+    dot: "bg-destructive",
+    chip: "bg-destructive/10 text-destructive",
+    border: "border-l-destructive",
+  },
+  desmarcado_paciente: {
+    dot: "bg-destructive",
+    chip: "bg-destructive/10 text-destructive",
+    border: "border-l-destructive",
+  },
+  nao_compareceu: { dot: "bg-warm", chip: "bg-warm/15 text-warm", border: "border-l-warm" },
+  realizado: {
+    dot: "bg-muted-foreground",
+    chip: "bg-muted text-muted-foreground",
+    border: "border-l-muted-foreground",
+  },
+};
+
+function Legenda() {
+  const groups: { title: string; statuses: AppointmentStatus[] }[] = [
+    { title: "Antes da consulta", statuses: ["agendado", "encaixe"] },
+    { title: "Confirmação", statuses: ["confirmado_profissional", "confirmado_paciente"] },
+    {
+      title: "Cancelamento e falta",
+      statuses: ["desmarcado_profissional", "desmarcado_paciente", "nao_compareceu"],
+    },
+    { title: "Concluído", statuses: ["realizado"] },
+  ];
+  return (
+    <div className="cach-panel overflow-hidden">
+      <div className="border-b border-border px-4 py-3.5">
+        <h2 className="text-sm font-semibold">Legenda</h2>
+      </div>
+      <div className="space-y-3 p-4">
+        {groups.map((group) => (
+          <div key={group.title}>
+            <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {group.title}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {group.statuses.map((status) => (
+                <StatusChip key={status} status={status} />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function WaitlistPanel({ entries }: { entries: agendaDb.WaitlistEntry[] }) {
@@ -421,7 +496,7 @@ function WaitlistPanel({ entries }: { entries: agendaDb.WaitlistEntry[] }) {
   });
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+    <div className="cach-panel overflow-hidden">
       <div className="flex items-center gap-2 border-b border-border px-4 py-3.5">
         <Users className="size-4 text-muted-foreground" />
         <h2 className="text-sm font-semibold">Lista de espera</h2>
@@ -681,7 +756,7 @@ function AppointmentDialog({
           </div>
 
           {conflictWarning ? (
-            <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
+            <div className="flex items-start gap-2 rounded-md border border-warm/30 bg-warm/10 p-2.5 text-xs text-warm">
               <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
               {conflictWarning}
             </div>
@@ -766,6 +841,11 @@ function combineDateTime(date: string, time: string): Date | null {
 
 function formatShortDate(date: Date): string {
   return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(date);
+}
+
+function formatMonthYear(date: Date): string {
+  const label = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(date);
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function formatFullDate(date: Date): string {
