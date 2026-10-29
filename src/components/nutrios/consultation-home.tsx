@@ -161,6 +161,7 @@ export function ConsultationHome() {
           id: tarefa.id,
           patient,
           consultationId: tarefa.consultationId,
+          tipo: tarefa.tipo,
           title: tarefa.titulo,
           detail: tarefa.motivo,
           actionLabel: tarefa.actionLabel,
