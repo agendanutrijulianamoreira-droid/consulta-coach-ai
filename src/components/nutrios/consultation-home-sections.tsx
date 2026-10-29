@@ -1,4 +1,6 @@
-import type { ReactNode, RefObject } from "react";
+import { useState, type ReactNode, type RefObject } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
 import {
   ArrowRight,
   AlertTriangle,
@@ -8,11 +10,15 @@ import {
   CalendarRange,
   CheckCircle2,
   Clock3,
+  Copy,
   FileText,
+  MessageCircle,
   Search,
+  Sparkles,
   Stethoscope,
   UserPlus,
   UsersRound,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -20,7 +26,13 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { describeAiError } from "@/lib/nutrios/ai-error";
 import type { Patient } from "@/lib/nutrios/repository";
+import {
+  gerarRascunhoMensagem,
+  gerarResumoDia,
+} from "@/modules/ia-gerente/application/resumo.functions";
+import type { TarefaTipo } from "@/modules/ia-gerente/domain/fila";
 
 export type PatientRow = {
   patient: Patient;
@@ -34,6 +46,7 @@ export type AttentionItem = {
   id: string;
   patient: Patient;
   consultationId?: string | null;
+  tipo: TarefaTipo;
   title: string;
   detail: string;
   actionLabel: string;
@@ -216,6 +229,73 @@ export function AttentionCenter({
   pendingId?: string | null;
   isLoading?: boolean;
 }) {
+  const gerarResumo = useServerFn(gerarResumoDia);
+  const gerarRascunho = useServerFn(gerarRascunhoMensagem);
+  const [resumo, setResumo] = useState<{
+    resumo: string;
+    pontos: { texto: string; origem: string }[];
+  } | null>(null);
+  const [resumoLoading, setResumoLoading] = useState(false);
+  const [draftOpenId, setDraftOpenId] = useState<string | null>(null);
+  const [draftLoadingId, setDraftLoadingId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+
+  async function handleGerarResumo() {
+    setResumoLoading(true);
+    try {
+      const result = await gerarResumo({
+        data: {
+          tarefas: items.map((item) => ({
+            titulo: item.title,
+            motivo: item.detail,
+            pacienteNome: item.patient.name,
+            tipo: item.tipo,
+          })),
+        },
+      });
+      setResumo(result);
+    } catch (error) {
+      toast.error(describeAiError(error, "Revise a fila manualmente enquanto isso."));
+    } finally {
+      setResumoLoading(false);
+    }
+  }
+
+  async function handleRascunho(item: AttentionItem) {
+    if (draftOpenId === item.id) {
+      setDraftOpenId(null);
+      return;
+    }
+    setDraftOpenId(item.id);
+    if (drafts[item.id]) return;
+    setDraftLoadingId(item.id);
+    try {
+      const result = await gerarRascunho({
+        data: {
+          pacienteNome: item.patient.name,
+          titulo: item.title,
+          motivo: item.detail,
+          tipo: item.tipo,
+        },
+      });
+      setDrafts((current) => ({ ...current, [item.id]: result.mensagem }));
+    } catch (error) {
+      toast.error(describeAiError(error, "Escreva a mensagem manualmente enquanto isso."));
+      setDraftOpenId(null);
+    } finally {
+      setDraftLoadingId(null);
+    }
+  }
+
+  async function copyDraft(text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("Mensagem copiada.");
+    } catch {
+      toast.error("Não foi possível copiar. Selecione o texto manualmente.");
+    }
+  }
+
   return (
     <Card className="cach-panel mt-5 overflow-hidden">
       <div className="flex flex-col gap-2 border-b border-border px-4 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-5">
@@ -225,14 +305,54 @@ export function AttentionCenter({
             O que merece uma ação antes de encerrar o dia, em ordem de prioridade.
           </p>
         </div>
-        <span className="text-xs text-muted-foreground" aria-live="polite">
-          {isLoading
-            ? "Carregando…"
-            : items.length
-              ? `${items.length} item${items.length === 1 ? "" : "s"}`
-              : "Tudo em dia"}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground" aria-live="polite">
+            {isLoading
+              ? "Carregando…"
+              : items.length
+                ? `${items.length} item${items.length === 1 ? "" : "s"}`
+                : "Tudo em dia"}
+          </span>
+          {items.length ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={resumoLoading}
+              onClick={() => void handleGerarResumo()}
+            >
+              <Sparkles /> {resumoLoading ? "Gerando…" : "Resumo do dia"}
+            </Button>
+          ) : null}
+        </div>
       </div>
+
+      {resumo ? (
+        <div className="space-y-2 border-b border-border bg-sand-soft/40 px-4 py-3.5 sm:px-5">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-sm leading-6 text-foreground">{resumo.resumo}</p>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-7 shrink-0"
+              onClick={() => setResumo(null)}
+              aria-label="Fechar resumo"
+            >
+              <X className="size-3.5" />
+            </Button>
+          </div>
+          {resumo.pontos.length ? (
+            <ul className="space-y-1 text-xs text-muted-foreground">
+              {resumo.pontos.map((ponto, index) => (
+                <li key={index}>
+                  • {ponto.texto} <span className="text-muted-foreground/70">({ponto.origem})</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
 
       {isLoading ? (
         <div className="px-4 py-8 text-sm text-muted-foreground sm:px-5" aria-busy="true">
@@ -248,60 +368,92 @@ export function AttentionCenter({
               attention: "bg-sand-soft text-sand-ink",
               informative: "bg-accent text-accent-foreground",
             }[item.tone];
+            const canDraftMessage = item.tipo !== "consulta_aberta";
 
             return (
-              <div
-                key={item.id}
-                className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:px-5"
-              >
-                <span
-                  className={`flex size-9 shrink-0 items-center justify-center rounded-full ${toneClass}`}
-                >
-                  <Icon className="size-4" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold">{item.title}</p>
-                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                    {item.patient.name} · {item.detail}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  {onSnooze ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="min-h-10"
-                      disabled={pendingId === item.id}
-                      title="Adiar: volta a aparecer amanhã"
-                      onClick={() => onSnooze(item)}
-                    >
-                      <Clock3 /> Adiar
-                    </Button>
-                  ) : null}
-                  {onDismiss ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="min-h-10"
-                      disabled={pendingId === item.id}
-                      title="Descartar: tira da fila sem alterar nenhum dado clínico"
-                      onClick={() => onDismiss(item)}
-                    >
-                      <Archive /> Descartar
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    variant={item.tone === "urgent" ? "destructive" : "outline"}
-                    size="sm"
-                    className="min-h-10"
-                    onClick={() => onOpen(item)}
+              <div key={item.id}>
+                <div className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:px-5">
+                  <span
+                    className={`flex size-9 shrink-0 items-center justify-center rounded-full ${toneClass}`}
                   >
-                    {item.actionLabel} <ArrowRight />
-                  </Button>
+                    <Icon className="size-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">{item.title}</p>
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {item.patient.name} · {item.detail}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                    {canDraftMessage ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="min-h-10"
+                        disabled={draftLoadingId === item.id}
+                        title="Rascunho de mensagem de WhatsApp para revisar e enviar manualmente"
+                        onClick={() => void handleRascunho(item)}
+                      >
+                        <MessageCircle /> {draftLoadingId === item.id ? "Gerando…" : "Rascunho"}
+                      </Button>
+                    ) : null}
+                    {onSnooze ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="min-h-10"
+                        disabled={pendingId === item.id}
+                        title="Adiar: volta a aparecer amanhã"
+                        onClick={() => onSnooze(item)}
+                      >
+                        <Clock3 /> Adiar
+                      </Button>
+                    ) : null}
+                    {onDismiss ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="min-h-10"
+                        disabled={pendingId === item.id}
+                        title="Descartar: tira da fila sem alterar nenhum dado clínico"
+                        onClick={() => onDismiss(item)}
+                      >
+                        <Archive /> Descartar
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="button"
+                      variant={item.tone === "urgent" ? "destructive" : "outline"}
+                      size="sm"
+                      className="min-h-10"
+                      onClick={() => onOpen(item)}
+                    >
+                      {item.actionLabel} <ArrowRight />
+                    </Button>
+                  </div>
                 </div>
+                {draftOpenId === item.id ? (
+                  <div className="mx-4 mb-3.5 rounded-lg border border-border bg-muted/30 p-3 sm:mx-5">
+                    {draftLoadingId === item.id ? (
+                      <p className="text-xs text-muted-foreground">Gerando rascunho…</p>
+                    ) : drafts[item.id] ? (
+                      <div className="space-y-2">
+                        <p className="text-sm leading-6 text-foreground">{drafts[item.id]}</p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void copyDraft(drafts[item.id]!)}
+                        >
+                          <Copy /> Copiar
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             );
           })}
