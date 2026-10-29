@@ -2,7 +2,7 @@
  * Etapa 1 — Tela 1 (Fontes). Verifica o que já existe de verdade nesta
  * consulta antes de qualquer síntese: nunca finge que uma fonte está
  * disponível quando o recurso correspondente ainda não existe no sistema
- * (Acompanhamento via WhatsApp e Evolução fotográfica são etapas futuras).
+ * (Acompanhamento via WhatsApp continua sendo etapa futura).
  */
 export type FonteKey = "anamnese" | "transcricao" | "exames" | "acompanhamento" | "fotos";
 
@@ -23,12 +23,14 @@ export function computeFontesReadiness(input: {
   anamnesisFields: AnamnesisFields;
   segments: TranscriptSegment[];
   labResults: LabResultLike[];
+  photoCount: number;
 }): FonteStatus[] {
   const anamneseReady = Object.values(input.anamnesisFields).some(
     (field) => typeof field?.value === "string" && field.value.trim().length > 0,
   );
   const transcricaoReady = input.segments.length > 0;
   const examesReady = input.labResults.length > 0;
+  const fotosReady = input.photoCount > 0;
 
   return [
     {
@@ -68,9 +70,11 @@ export function computeFontesReadiness(input: {
     {
       key: "fotos",
       label: "Evolução fotográfica",
-      implemented: false,
-      ready: false,
-      detail: "Recurso ainda não implementado no sistema.",
+      implemented: true,
+      ready: fotosReady,
+      detail: fotosReady
+        ? `${input.photoCount} foto(s) de evolução registrada(s).`
+        : "Nenhuma foto de evolução registrada ainda.",
     },
   ];
 }
